@@ -38,7 +38,11 @@ export class CommbuysApiError extends Error {
 
 /**
  * Parse opportunity data from Boston.gov bid listings markdown
- * Format: [TITLE](/bid-listings/ID) followed by * Posted: and * Due: lines
+ * Format: [TITLE](https://www.boston.gov/bid-listings/ID "Title")
+ * Followed by:
+ *   - Posted:
+ *   01/05/2026 - 9:00am
+ *   - Due:01/21/2026 - 12:00pm
  */
 function parseOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
   const opportunities: CommbuysOpportunity[] = [];
@@ -49,22 +53,28 @@ function parseOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Match bid title links: [Title](/bid-listings/ID "Title") or [Title](/departments/...)
-    // Format: [PROJECT TITLE](/bid-listings/family-overdose-support-fund-0 "PROJECT TITLE")
-    const titleMatch = line.match(/^\[([^\]]+)\]\(\/bid-listings\/([^\s\)]+)/);
+    // Match bid title links with full URL:
+    // [Speed Radar Feedback Signs](https://www.boston.gov/bid-listings/ev00016951 "Speed Radar Feedback Signs ")
+    const titleMatch = line.match(/^\[([^\]]+)\]\(https:\/\/www\.boston\.gov\/bid-listings\/([^\s\)"]+)/);
 
     if (titleMatch) {
+      const title = titleMatch[1].trim();
+
+      // Skip email links (contact info also links to bid page)
+      if (title.includes('@')) {
+        continue;
+      }
       // Save previous bid if exists
       if (currentBid && currentBid.bidId) {
         opportunities.push(currentBid as CommbuysOpportunity);
       }
 
-      const title = titleMatch[1].trim();
-      const urlSlug = titleMatch[2].replace(/["'].*$/, '').trim();
+      const urlSlug = titleMatch[2].trim();
 
-      // Extract EV number if present in title or nearby
-      const evMatch = line.match(/\(?(EV\d+)\)?/);
-      const bidId = evMatch ? evMatch[1] : `BOSTON-${urlSlug}`;
+      // Extract EV number from URL slug (e.g., ev00016951)
+      const bidId = urlSlug.toUpperCase().startsWith('EV')
+        ? urlSlug.toUpperCase()
+        : `BOSTON-${urlSlug}`;
 
       currentBid = {
         bidId,
@@ -79,25 +89,34 @@ function parseOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
       };
     }
 
-    // Parse Posted date: "* Posted: 01/07/2026" or "Posted: 01/07/2026"
     if (currentBid) {
-      const postedMatch = line.match(/Posted[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
-      if (postedMatch) {
-        currentBid.postedDate = postedMatch[1];
-      }
-
-      // Parse Due date: "* Due: 01/22/2026" or "Due: 01/22/2026"
-      const dueMatch = line.match(/Due[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
-      if (dueMatch) {
-        currentBid.dueDate = dueMatch[1];
-      }
-
-      // Parse Contact name (usually appears after "Contact:")
-      if (line.match(/^Contact/i) || (lines[i-1] && lines[i-1].match(/Contact/i))) {
-        // Next non-empty line might be contact name
+      // Check if this line is "- Posted:" and next line has the date
+      if (line.match(/^-?\s*Posted:?\s*$/i)) {
         const nextLine = lines[i + 1]?.trim();
-        if (nextLine && !nextLine.startsWith('*') && !nextLine.startsWith('[') && nextLine.length > 2) {
-          currentBid.description = `Contact: ${nextLine}`;
+        const dateMatch = nextLine?.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+        if (dateMatch) {
+          currentBid.postedDate = dateMatch[1];
+        }
+      }
+
+      // Check if this line is "- Due:" with date on same line or next line
+      // Format: "- Due:01/21/2026 - 12:00pm"
+      const dueInlineMatch = line.match(/^-?\s*Due:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (dueInlineMatch) {
+        currentBid.dueDate = dueInlineMatch[1];
+      } else if (line.match(/^-?\s*Due:?\s*$/i)) {
+        const nextLine = lines[i + 1]?.trim();
+        const dateMatch = nextLine?.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+        if (dateMatch) {
+          currentBid.dueDate = dateMatch[1];
+        }
+      }
+
+      // Also check for date on the current line (standalone date line after Posted:)
+      if (!currentBid.postedDate && lines[i - 1]?.trim().match(/^-?\s*Posted:?\s*$/i)) {
+        const dateMatch = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+        if (dateMatch) {
+          currentBid.postedDate = dateMatch[1];
         }
       }
     }

@@ -8,47 +8,45 @@ const SAM_GOV_API_URL =
   process.env.SAM_GOV_API_URL || 'https://api.sam.gov/prod/opportunities/v2/search';
 const SAM_GOV_API_KEY = process.env.SAM_GOV_API_KEY || '';
 
-// Rate limiting: SAM.gov has very strict limits
-const RATE_LIMIT_DELAY_MS = 3000; // 3 seconds between requests
-const MAX_RETRIES = 5;
+// Rate limiting: SAM.gov limits are per DAY, not per second
+// - Public: 10/day
+// - Entity-associated: 1,000/day
+// - System account: 10,000/day
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Track remaining quota from response headers
+let rateLimitRemaining: number | null = null;
+
+export function getRateLimitRemaining(): number | null {
+  return rateLimitRemaining;
 }
 
-async function rateLimitedFetch(url: string, options: RequestInit): Promise<Response> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // Wait before each request (exponential backoff)
-    const waitTime = attempt === 0
-      ? RATE_LIMIT_DELAY_MS
-      : RATE_LIMIT_DELAY_MS * Math.pow(2, attempt); // 3s, 6s, 12s, 24s, 48s
-
-    await sleep(waitTime);
-
-    try {
-      const response = await fetch(url, options);
-
-      // If rate limited, retry with backoff
-      if (response.status === 429) {
-        console.log(`SAM.gov rate limited, attempt ${attempt + 1}/${MAX_RETRIES}, waiting ${waitTime * 2}ms`);
-        lastError = new Error('Rate limited');
-        continue;
-      }
-
-      return response;
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error('Unknown error');
-      continue;
-    }
+async function samGovFetch(url: string, options: RequestInit): Promise<Response> {
+  // Check if we're about to exhaust daily quota
+  if (rateLimitRemaining !== null && rateLimitRemaining < 2) {
+    throw new SamGovApiError(
+      `SAM.gov daily rate limit nearly exhausted (${rateLimitRemaining} remaining). Try again tomorrow.`,
+      429
+    );
   }
 
-  throw new SamGovApiError(
-    'SAM.gov API rate limit exceeded after retries',
-    429,
-    lastError?.message
-  );
+  const response = await fetch(url, options);
+
+  // Update rate limit tracking from response headers
+  const remaining = response.headers.get('X-RateLimit-Remaining');
+  if (remaining) {
+    rateLimitRemaining = parseInt(remaining, 10);
+    console.log(`SAM.gov rate limit remaining: ${rateLimitRemaining}`);
+  }
+
+  if (response.status === 429) {
+    const limit = response.headers.get('X-RateLimit-Limit');
+    throw new SamGovApiError(
+      `SAM.gov daily rate limit exceeded (limit: ${limit || 'unknown'}). Try again tomorrow.`,
+      429
+    );
+  }
+
+  return response;
 }
 
 export class SamGovApiError extends Error {
@@ -83,7 +81,7 @@ function toSamGovDateFormat(dateStr: string): string {
  * Build query parameters for SAM.gov API from our filter format
  */
 function buildQueryParams(params: SamGovSearchParams): URLSearchParams {
-  const { filters, limit = 25, offset = 0 } = params;
+  const { filters, limit = 1000, offset = 0 } = params;
   const queryParams = new URLSearchParams();
 
   queryParams.set('api_key', SAM_GOV_API_KEY);
@@ -148,7 +146,7 @@ export async function searchOpportunities(
   const url = `${SAM_GOV_API_URL}?${queryParams.toString()}`;
 
   try {
-    const response = await rateLimitedFetch(url, {
+    const response = await samGovFetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -189,7 +187,7 @@ export async function getOpportunityById(
   const url = `https://api.sam.gov/opportunities/v2/search?api_key=${SAM_GOV_API_KEY}&noticeId=${noticeId}`;
 
   try {
-    const response = await rateLimitedFetch(url, {
+    const response = await samGovFetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -274,33 +272,20 @@ export function normalizeOpportunity(opportunity: SamGovOpportunity) {
  */
 export async function fetchAllOpportunities(
   filters: ContractSearchFilters,
-  maxResults = 100
+  maxResults = 1000
 ): Promise<ReturnType<typeof normalizeOpportunity>[]> {
-  const results: ReturnType<typeof normalizeOpportunity>[] = [];
-  const pageSize = 25; // Small page size to minimize API calls
-  let offset = 0;
+  // Use single request with max page size to minimize API calls
+  // SAM.gov allows up to 1000 per request
+  const response = await searchOpportunities({
+    filters,
+    limit: Math.min(maxResults, 1000),
+    offset: 0,
+  });
 
-  while (results.length < maxResults) {
-    const response = await searchOpportunities({
-      filters,
-      limit: pageSize,
-      offset,
-    });
-
-    if (!response.opportunitiesData || response.opportunitiesData.length === 0) {
-      break;
-    }
-
-    const normalized = response.opportunitiesData.map(normalizeOpportunity);
-    results.push(...normalized);
-
-    // Stop after first page to avoid rate limits during initial sync
-    if (maxResults <= 25 || response.opportunitiesData.length < pageSize) {
-      break;
-    }
-
-    offset += pageSize;
+  if (!response.opportunitiesData || response.opportunitiesData.length === 0) {
+    return [];
   }
 
-  return results.slice(0, maxResults);
+  const normalized = response.opportunitiesData.map(normalizeOpportunity);
+  return normalized.slice(0, maxResults);
 }
