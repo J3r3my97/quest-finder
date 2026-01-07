@@ -2,81 +2,29 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Search, Bell, Bookmark, TrendingUp, ArrowRight, Calendar, DollarSign, Building2 } from "lucide-react";
-import type { ContractLead } from "@/types";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-// Mock data for recent contracts
-const recentContracts: ContractLead[] = [
-  {
-    id: "1",
-    title: "IT Support Services for Federal Agency",
-    agency: "Department of Defense",
-    estimatedValue: 2500000,
-    responseDeadline: new Date("2024-03-15"),
-    naicsCodes: ["541512"],
-    setAsideType: "SBA",
-    description: "Comprehensive IT support and managed services.",
-    sourceUrl: "https://sam.gov",
-    postedDate: new Date("2024-01-10"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "2",
-    title: "Cybersecurity Assessment and Consulting",
-    agency: "Department of Homeland Security",
-    estimatedValue: 1800000,
-    responseDeadline: new Date("2024-03-20"),
-    naicsCodes: ["541519"],
-    setAsideType: "8A",
-    description: "Security assessment and vulnerability testing.",
-    sourceUrl: "https://sam.gov",
-    postedDate: new Date("2024-01-12"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "3",
-    title: "Cloud Migration Services",
-    agency: "General Services Administration",
-    estimatedValue: 3200000,
-    responseDeadline: new Date("2024-04-01"),
-    naicsCodes: ["541512", "518210"],
-    setAsideType: "WOSB",
-    description: "AWS cloud migration and management services.",
-    sourceUrl: "https://sam.gov",
-    postedDate: new Date("2024-01-14"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
-const stats = [
-  { label: "Total Searches", value: "24", icon: Search, change: "+12%" },
-  { label: "Saved Contracts", value: "8", icon: Bookmark, change: "+3" },
-  { label: "Active Alerts", value: "5", icon: Bell, change: "0" },
-  { label: "Matches This Week", value: "42", icon: TrendingUp, change: "+18%" },
-];
-
-function formatCurrency(value: number | null): string {
+function formatCurrency(value: unknown): string {
   if (!value) return "TBD";
+  const numValue = typeof value === "string" ? parseFloat(value) :
+                   typeof value === "bigint" ? Number(value) :
+                   typeof value === "number" ? value :
+                   Number(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     notation: "compact",
     maximumFractionDigits: 1,
-  }).format(value);
+  }).format(numValue);
 }
 
 function formatDate(date: Date | null): string {
@@ -90,13 +38,17 @@ function formatDate(date: Date | null): string {
 
 function getSetAsideLabel(type: string | null): string {
   const labels: Record<string, string> = {
-    small_business: "Small Business",
-    woman_owned: "WOSB",
-    veteran_owned: "VOSB",
-    hubzone: "HUBZone",
-    "8a": "8(a)",
-    sdvosb: "SDVOSB",
-    none: "Full & Open",
+    SBA: "Small Business",
+    SBP: "Small Business",
+    "8A": "8(a)",
+    "8AN": "8(a)",
+    WOSB: "WOSB",
+    WOSBSS: "WOSB",
+    EDWOSB: "EDWOSB",
+    SDVOSBC: "SDVOSB",
+    SDVOSBS: "SDVOSB",
+    HZC: "HUBZone",
+    HZS: "HUBZone",
   };
   return type ? labels[type] || type : "Full & Open";
 }
@@ -107,6 +59,29 @@ export default async function DashboardPage() {
   if (!session?.user) {
     redirect("/login");
   }
+
+  // Fetch recent contracts from database
+  const recentContracts = await prisma.contractLead.findMany({
+    orderBy: { postedDate: "desc" },
+    take: 5,
+  });
+
+  // Fetch stats
+  const totalContracts = await prisma.contractLead.count();
+  const contractsThisWeek = await prisma.contractLead.count({
+    where: {
+      createdAt: {
+        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    },
+  });
+
+  const stats = [
+    { label: "Total Contracts", value: totalContracts.toString(), icon: Search, change: "in database" },
+    { label: "Saved Contracts", value: "0", icon: Bookmark, change: "coming soon" },
+    { label: "Active Alerts", value: "0", icon: Bell, change: "coming soon" },
+    { label: "New This Week", value: contractsThisWeek.toString(), icon: TrendingUp, change: "contracts" },
+  ];
 
   return (
     <div className="container py-8">
@@ -152,7 +127,7 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className="text-xs text-muted-foreground">
-                {stat.change} from last week
+                {stat.change}
               </p>
             </CardContent>
           </Card>
@@ -166,9 +141,9 @@ export default async function DashboardPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Recent Contract Matches</CardTitle>
+                  <CardTitle>Recent Contracts</CardTitle>
                   <CardDescription>
-                    Based on your saved searches and preferences
+                    Latest government contract opportunities
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
@@ -177,40 +152,46 @@ export default async function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {recentContracts.map((contract) => (
-                <div
-                  key={contract.id}
-                  className="flex flex-col space-y-2 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <Link
-                        href={`/contracts/${contract.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {contract.title}
-                      </Link>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Building2 className="h-3 w-3" />
-                        {contract.agency}
+              {recentContracts.length > 0 ? (
+                recentContracts.map((contract) => (
+                  <div
+                    key={contract.id}
+                    className="flex flex-col space-y-2 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <Link
+                          href={`/contracts/${contract.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {contract.title}
+                        </Link>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Building2 className="h-3 w-3" />
+                          {contract.agency}
+                        </div>
+                      </div>
+                      <Badge variant="secondary">
+                        {getSetAsideLabel(contract.setAsideType)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3 text-muted-foreground" />
+                        {formatCurrency(contract.estimatedValue)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        Due: {formatDate(contract.responseDeadline)}
                       </div>
                     </div>
-                    <Badge variant="secondary">
-                      {getSetAsideLabel(contract.setAsideType ?? null)}
-                    </Badge>
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-3 w-3 text-muted-foreground" />
-                      {formatCurrency(contract.estimatedValue ?? null)}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3 text-muted-foreground" />
-                      Due: {formatDate(contract.responseDeadline ?? null)}
-                    </div>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No contracts found. Run the seed script to add sample data.
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </div>

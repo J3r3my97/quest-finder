@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Search,
@@ -48,111 +48,19 @@ import {
   Plus,
   Calendar,
 } from "lucide-react";
-import type { SavedSearch, Alert, AlertFrequency } from "@/types";
+import type { SavedSearch, Alert, AlertFrequency, ContractSearchFilters } from "@/types";
 
-// Extended type for display purposes
 interface SavedSearchWithAlert extends SavedSearch {
   alert?: Alert;
-  matchCount: number;
 }
 
-// Mock data for saved searches
-const mockSavedSearches: SavedSearchWithAlert[] = [
-  {
-    id: "1",
-    userId: "user1",
-    name: "IT Services - DOD",
-    filters: {
-      keyword: "IT support services",
-      agency: "Department of Defense",
-      naicsCodes: ["541512"],
-      setAsideType: "SBA",
-    },
-    createdAt: new Date("2024-01-05"),
-    updatedAt: new Date("2024-01-05"),
-    alert: {
-      id: "a1",
-      userId: "user1",
-      savedSearchId: "1",
-      frequency: "DAILY",
-      lastSentAt: new Date("2024-01-15"),
-      lastMatchCount: 5,
-      isActive: true,
-      createdAt: new Date("2024-01-05"),
-      updatedAt: new Date("2024-01-15"),
-    },
-    matchCount: 42,
-  },
-  {
-    id: "2",
-    userId: "user1",
-    name: "Cybersecurity Contracts",
-    filters: {
-      keyword: "cybersecurity",
-      naicsCodes: ["541519"],
-      setAsideType: "8A",
-    },
-    createdAt: new Date("2024-01-08"),
-    updatedAt: new Date("2024-01-08"),
-    alert: {
-      id: "a2",
-      userId: "user1",
-      savedSearchId: "2",
-      frequency: "WEEKLY",
-      lastSentAt: new Date("2024-01-10"),
-      lastMatchCount: 3,
-      isActive: true,
-      createdAt: new Date("2024-01-08"),
-      updatedAt: new Date("2024-01-10"),
-    },
-    matchCount: 28,
-  },
-  {
-    id: "3",
-    userId: "user1",
-    name: "Cloud Services",
-    filters: {
-      keyword: "cloud migration AWS",
-      naicsCodes: ["541512", "518210"],
-      estimatedValueMin: 1000000,
-      estimatedValueMax: 5000000,
-    },
-    createdAt: new Date("2024-01-10"),
-    updatedAt: new Date("2024-01-10"),
-    matchCount: 15,
-  },
-  {
-    id: "4",
-    userId: "user1",
-    name: "VA Healthcare IT",
-    filters: {
-      keyword: "healthcare software",
-      agency: "Department of Veterans Affairs",
-      setAsideType: "SDVOSBC",
-    },
-    createdAt: new Date("2024-01-12"),
-    updatedAt: new Date("2024-01-12"),
-    alert: {
-      id: "a4",
-      userId: "user1",
-      savedSearchId: "4",
-      frequency: "REALTIME",
-      lastSentAt: null,
-      lastMatchCount: 0,
-      isActive: false,
-      createdAt: new Date("2024-01-12"),
-      updatedAt: new Date("2024-01-12"),
-    },
-    matchCount: 8,
-  },
-];
-
-function formatDate(date: Date): string {
+function formatDate(date: Date | string): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  }).format(dateObj);
 }
 
 function getFrequencyLabel(frequency: AlertFrequency): string {
@@ -164,7 +72,7 @@ function getFrequencyLabel(frequency: AlertFrequency): string {
   return labels[frequency];
 }
 
-function formatFilters(filters: SavedSearch["filters"]): string {
+function formatFilters(filters: ContractSearchFilters): string {
   const parts: string[] = [];
   if (filters.keyword) parts.push(`"${filters.keyword}"`);
   if (filters.agency) parts.push(filters.agency);
@@ -179,35 +87,98 @@ function formatFilters(filters: SavedSearch["filters"]): string {
     };
     parts.push(labels[filters.setAsideType] || filters.setAsideType);
   }
-  return parts.join(" • ");
+  return parts.length > 0 ? parts.join(" • ") : "No filters applied";
+}
+
+function LoadingSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-[200px]" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-[80px]" />
+            <Skeleton className="h-8 w-8" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-4 w-[150px]" />
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SavedSearchesPage() {
-  const [searches, setSearches] = useState(mockSavedSearches);
-  const [editingSearch, setEditingSearch] = useState<typeof mockSavedSearches[0] | null>(null);
+  const [searches, setSearches] = useState<SavedSearchWithAlert[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingSearch, setEditingSearch] = useState<SavedSearchWithAlert | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const toggleAlert = (searchId: string) => {
+  useEffect(() => {
+    fetchSavedSearches();
+  }, []);
+
+  const fetchSavedSearches = async () => {
+    try {
+      const response = await fetch("/api/saved-searches");
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Not authenticated - show empty state
+          setSearches([]);
+          return;
+        }
+        throw new Error("Failed to fetch saved searches");
+      }
+      const data = await response.json();
+      setSearches(data.data || []);
+    } catch (error) {
+      console.error("Error fetching saved searches:", error);
+      toast.error("Failed to load saved searches");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleAlert = async (searchId: string) => {
+    const search = searches.find(s => s.id === searchId);
+    if (!search?.alert) return;
+
+    // Optimistic update
     setSearches((prev) =>
-      prev.map((search) => {
-        if (search.id === searchId && search.alert) {
+      prev.map((s) => {
+        if (s.id === searchId && s.alert) {
           return {
-            ...search,
-            alert: { ...search.alert, isActive: !search.alert.isActive },
+            ...s,
+            alert: { ...s.alert, isActive: !s.alert.isActive },
           };
         }
-        return search;
+        return s;
       })
     );
     toast.success("Alert settings updated");
   };
 
-  const deleteSearch = (searchId: string) => {
-    setSearches((prev) => prev.filter((s) => s.id !== searchId));
-    toast.success("Search deleted");
+  const deleteSearch = async (searchId: string) => {
+    try {
+      const response = await fetch(`/api/saved-searches?id=${searchId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete");
+
+      setSearches((prev) => prev.filter((s) => s.id !== searchId));
+      toast.success("Search deleted");
+    } catch (error) {
+      console.error("Error deleting search:", error);
+      toast.error("Failed to delete search");
+    }
   };
 
-  const updateSearchName = (searchId: string, newName: string) => {
+  const updateSearchName = async (searchId: string, newName: string) => {
+    // Optimistic update
     setSearches((prev) =>
       prev.map((search) => {
         if (search.id === searchId) {
@@ -219,6 +190,25 @@ export default function SavedSearchesPage() {
     setIsEditDialogOpen(false);
     toast.success("Search renamed");
   };
+
+  if (isLoading) {
+    return (
+      <div className="container py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <Skeleton className="h-8 w-[200px] mb-2" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <Skeleton className="h-10 w-[120px]" />
+        </div>
+        <div className="grid gap-4">
+          <LoadingSkeleton />
+          <LoadingSkeleton />
+          <LoadingSkeleton />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container py-8">
@@ -266,10 +256,11 @@ export default function SavedSearchesPage() {
                         </Badge>
                       )}
                     </div>
-                    <CardDescription>{formatFilters(search.filters)}</CardDescription>
+                    <CardDescription>
+                      {formatFilters(search.filters as ContractSearchFilters)}
+                    </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">{search.matchCount} matches</Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -379,9 +370,9 @@ export default function SavedSearchesPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="instant">Instant</SelectItem>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="REALTIME">Instant</SelectItem>
+                        <SelectItem value="DAILY">Daily</SelectItem>
+                        <SelectItem value="WEEKLY">Weekly</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

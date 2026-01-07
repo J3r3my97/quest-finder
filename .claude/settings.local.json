@@ -16,7 +16,12 @@
       "Bash(npm run lint:*)",
       "Bash(npx eslint:*)",
       "Bash(npm run build:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(docker:*)",
+      "Bash(psql:*)",
+      "Bash(npm run db:seed:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)"
     ]
   }
 }

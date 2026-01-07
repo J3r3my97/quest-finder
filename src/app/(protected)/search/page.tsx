@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,86 +32,17 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import type { ContractLead, SetAsideType } from "@/types";
+import type { ContractLead } from "@/types";
 
-// Mock data for search results
-const mockContracts: ContractLead[] = [
-  {
-    id: "1",
-    title: "IT Support Services for Federal Agency",
-    agency: "Department of Defense",
-    estimatedValue: 2500000,
-    responseDeadline: new Date("2024-03-15"),
-    naicsCodes: ["541512"],
-    setAsideType: "SBA",
-    description: "Comprehensive IT support and managed services for DOD facilities nationwide. Includes help desk, network administration, and cybersecurity services.",
-    sourceUrl: "https://sam.gov/opp/1",
-    postedDate: new Date("2024-01-10"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "2",
-    title: "Cybersecurity Assessment and Consulting",
-    agency: "Department of Homeland Security",
-    estimatedValue: 1800000,
-    responseDeadline: new Date("2024-03-20"),
-    naicsCodes: ["541519"],
-    setAsideType: "8A",
-    description: "Security assessment, vulnerability testing, and compliance consulting services.",
-    sourceUrl: "https://sam.gov/opp/2",
-    postedDate: new Date("2024-01-12"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "3",
-    title: "Cloud Migration Services",
-    agency: "General Services Administration",
-    estimatedValue: 3200000,
-    responseDeadline: new Date("2024-04-01"),
-    naicsCodes: ["541512", "518210"],
-    setAsideType: "WOSB",
-    description: "AWS cloud migration and management services for federal systems.",
-    sourceUrl: "https://sam.gov/opp/3",
-    postedDate: new Date("2024-01-14"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "4",
-    title: "Software Development Services",
-    agency: "Department of Veterans Affairs",
-    estimatedValue: 4500000,
-    responseDeadline: new Date("2024-04-15"),
-    naicsCodes: ["541511"],
-    setAsideType: "SDVOSBC",
-    description: "Custom software development and maintenance for VA healthcare systems.",
-    sourceUrl: "https://sam.gov/opp/4",
-    postedDate: new Date("2024-01-15"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "5",
-    title: "Data Analytics Platform",
-    agency: "Department of Commerce",
-    estimatedValue: 2100000,
-    responseDeadline: new Date("2024-03-25"),
-    naicsCodes: ["541512", "518210"],
-    setAsideType: null,
-    description: "Enterprise data analytics platform implementation and support.",
-    sourceUrl: "https://sam.gov/opp/5",
-    postedDate: new Date("2024-01-16"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
+interface ApiResponse {
+  data: ContractLead[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
 
 const agencies = [
   "All Agencies",
@@ -121,50 +52,58 @@ const agencies = [
   "Department of Veterans Affairs",
   "Department of Commerce",
   "Department of Health and Human Services",
+  "Department of the Treasury",
+  "Department of Justice",
+  "Department of Education",
 ];
 
 const setAsideTypes = [
   { value: "all", label: "All Types" },
-  { value: "small_business", label: "Small Business" },
-  { value: "woman_owned", label: "Women-Owned (WOSB)" },
-  { value: "veteran_owned", label: "Veteran-Owned (VOSB)" },
-  { value: "hubzone", label: "HUBZone" },
-  { value: "8a", label: "8(a)" },
-  { value: "sdvosb", label: "SDVOSB" },
+  { value: "SBA", label: "Small Business (SBA)" },
+  { value: "8A", label: "8(a)" },
+  { value: "WOSB", label: "Women-Owned (WOSB)" },
+  { value: "SDVOSBC", label: "SDVOSB" },
+  { value: "HZC", label: "HUBZone" },
 ];
 
 const sortOptions = [
-  { value: "date_desc", label: "Newest First" },
-  { value: "date_asc", label: "Oldest First" },
-  { value: "value_desc", label: "Highest Value" },
-  { value: "value_asc", label: "Lowest Value" },
-  { value: "deadline_asc", label: "Deadline (Soonest)" },
+  { value: "postedDate_desc", label: "Newest First" },
+  { value: "postedDate_asc", label: "Oldest First" },
+  { value: "estimatedValue_desc", label: "Highest Value" },
+  { value: "estimatedValue_asc", label: "Lowest Value" },
+  { value: "responseDeadline_asc", label: "Deadline (Soonest)" },
 ];
 
-function formatCurrency(value: number | null): string {
+function formatCurrency(value: number | string | null): string {
   if (!value) return "TBD";
+  const numValue = typeof value === "string" ? parseFloat(value) : value;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     notation: "compact",
     maximumFractionDigits: 1,
-  }).format(value);
+  }).format(numValue);
 }
 
-function formatDate(date: Date | null): string {
+function formatDate(date: Date | string | null): string {
   if (!date) return "TBD";
+  const dateObj = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  }).format(dateObj);
 }
 
 function getSetAsideLabel(type: string | null | undefined): string {
   const labels: Record<string, string> = {
     SBA: "Small Business",
+    SBP: "Small Business",
     "8A": "8(a)",
+    "8AN": "8(a)",
     WOSB: "WOSB",
+    WOSBSS: "WOSB",
+    EDWOSB: "EDWOSB",
     SDVOSBC: "SDVOSB",
     SDVOSBS: "SDVOSB",
     HZC: "HUBZone",
@@ -272,21 +211,68 @@ export default function SearchPage() {
   const [keyword, setKeyword] = useState("");
   const [agency, setAgency] = useState("All Agencies");
   const [setAsideType, setSetAsideType] = useState("all");
-  const [sortBy, setSortBy] = useState("date_desc");
-  const [isLoading, setIsLoading] = useState(false);
+  const [naicsCodes, setNaicsCodes] = useState("");
+  const [minValue, setMinValue] = useState("");
+  const [maxValue, setMaxValue] = useState("");
+  const [sortBy, setSortBy] = useState("postedDate_desc");
+  const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
-  const [contracts, setContracts] = useState<ContractLead[]>(mockContracts);
+  const [contracts, setContracts] = useState<ContractLead[]>([]);
   const [page, setPage] = useState(1);
-  const totalPages = 5;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const fetchContracts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", page.toString());
+      params.set("limit", "10");
+
+      if (keyword) params.set("keyword", keyword);
+      if (agency !== "All Agencies") params.set("agency", agency);
+      if (setAsideType !== "all") params.set("setAsideType", setAsideType);
+      if (naicsCodes) params.set("naicsCodes", naicsCodes);
+      if (minValue) params.set("estimatedValueMin", minValue);
+      if (maxValue) params.set("estimatedValueMax", maxValue);
+
+      const [sortField, sortOrder] = sortBy.split("_");
+      params.set("sortBy", sortField);
+      params.set("sortOrder", sortOrder);
+
+      const response = await fetch(`/api/contracts?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch contracts");
+
+      const data: ApiResponse = await response.json();
+      setContracts(data.data);
+      setTotalPages(data.pagination.totalPages);
+      setTotalCount(data.pagination.total);
+    } catch (error) {
+      console.error("Error fetching contracts:", error);
+      setContracts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, keyword, agency, setAsideType, naicsCodes, minValue, maxValue, sortBy]);
+
+  useEffect(() => {
+    fetchContracts();
+  }, [fetchContracts]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    // Simulate search
-    setTimeout(() => {
-      setContracts(mockContracts);
-      setIsLoading(false);
-    }, 500);
+    setPage(1);
+    fetchContracts();
+  };
+
+  const clearFilters = () => {
+    setKeyword("");
+    setAgency("All Agencies");
+    setSetAsideType("all");
+    setNaicsCodes("");
+    setMinValue("");
+    setMaxValue("");
+    setPage(1);
   };
 
   return (
@@ -350,26 +336,33 @@ export default function SearchPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="naics">NAICS Codes</Label>
-                <Input id="naics" placeholder="e.g., 541512, 518210" />
+                <Input
+                  id="naics"
+                  placeholder="e.g., 541512, 518210"
+                  value={naicsCodes}
+                  onChange={(e) => setNaicsCodes(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Contract Value Range</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  <Input placeholder="Min ($)" type="number" />
-                  <Input placeholder="Max ($)" type="number" />
+                  <Input
+                    placeholder="Min ($)"
+                    type="number"
+                    value={minValue}
+                    onChange={(e) => setMinValue(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Max ($)"
+                    type="number"
+                    value={maxValue}
+                    onChange={(e) => setMaxValue(e.target.value)}
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Response Deadline</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Input type="date" />
-                  <Input type="date" />
-                </div>
-              </div>
-
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={clearFilters}>
                 Clear Filters
               </Button>
             </CardContent>
@@ -405,7 +398,7 @@ export default function SearchPage() {
           {/* Results Header */}
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {contracts.length} contracts found
+              {totalCount} contracts found
             </p>
             <div className="flex items-center gap-2">
               <Label htmlFor="sort" className="text-sm">
@@ -452,7 +445,7 @@ export default function SearchPage() {
           </div>
 
           {/* Pagination */}
-          {contracts.length > 0 && (
+          {contracts.length > 0 && totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
               <Button
                 variant="outline"
@@ -464,16 +457,28 @@ export default function SearchPage() {
                 Previous
               </Button>
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <Button
-                    key={p}
-                    variant={p === page ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </Button>
-                ))}
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === page ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setPage(pageNum)}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
               </div>
               <Button
                 variant="outline"

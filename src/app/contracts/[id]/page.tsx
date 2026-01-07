@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,116 +21,36 @@ import {
   Bell,
   Share2,
   FileText,
+  MapPin,
+  Hash,
 } from "lucide-react";
-import type { ContractLead } from "@/types";
-
-// Extended type for contract detail
-interface ContractDetail extends ContractLead {
-  fullDescription: string;
-  contactInfo: { name: string; email: string; phone: string };
-}
-
-// Mock data for contract details
-const mockContracts: Record<string, ContractDetail> = {
-  "1": {
-    id: "1",
-    title: "IT Support Services for Federal Agency",
-    agency: "Department of Defense",
-    estimatedValue: 2500000,
-    responseDeadline: new Date("2024-03-15"),
-    naicsCodes: ["541512"],
-    setAsideType: "SBA",
-    description: "Comprehensive IT support and managed services for DOD facilities nationwide.",
-    fullDescription: `The Department of Defense is seeking qualified contractors to provide comprehensive IT support and managed services across DOD facilities nationwide.
-
-**Scope of Work:**
-- Help desk and end-user support services
-- Network administration and monitoring
-- Cybersecurity incident response
-- Hardware and software maintenance
-- Cloud infrastructure management
-
-**Requirements:**
-- Active Secret clearance required for key personnel
-- Demonstrated experience with federal IT environments
-- Compliance with NIST 800-171 standards
-- Minimum 5 years of experience in similar contracts
-
-**Period of Performance:**
-- Base year plus four option years
-- Expected start date: June 1, 2024`,
-    sourceUrl: "https://sam.gov/opp/1",
-    postedDate: new Date("2024-01-10"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    contactInfo: {
-      name: "John Smith",
-      email: "john.smith@dod.gov",
-      phone: "(555) 123-4567",
-    },
-  },
-  "2": {
-    id: "2",
-    title: "Cybersecurity Assessment and Consulting",
-    agency: "Department of Homeland Security",
-    estimatedValue: 1800000,
-    responseDeadline: new Date("2024-03-20"),
-    naicsCodes: ["541519"],
-    setAsideType: "8A",
-    description: "Security assessment, vulnerability testing, and compliance consulting services.",
-    fullDescription: `DHS requires cybersecurity assessment and consulting services to evaluate and enhance the security posture of critical infrastructure systems.
-
-**Scope of Work:**
-- Vulnerability assessments and penetration testing
-- Security compliance audits (FISMA, FedRAMP)
-- Risk assessment and mitigation planning
-- Security awareness training development
-- Incident response planning
-
-**Requirements:**
-- Top Secret clearance for project lead
-- CISSP, CISM, or equivalent certifications
-- Experience with federal security frameworks
-- Proven track record in federal cybersecurity
-
-**Deliverables:**
-- Comprehensive security assessment reports
-- Risk mitigation roadmap
-- Security policy recommendations`,
-    sourceUrl: "https://sam.gov/opp/2",
-    postedDate: new Date("2024-01-12"),
-    source: "SAM.gov",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    contactInfo: {
-      name: "Sarah Johnson",
-      email: "sarah.johnson@dhs.gov",
-      phone: "(555) 234-5678",
-    },
-  },
-};
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const { id } = await params;
-  const contract = mockContracts[id];
+  const contract = await prisma.contractLead.findUnique({
+    where: { id },
+  });
   if (!contract) {
     return { title: "Contract Not Found" };
   }
   return {
     title: contract.title,
-    description: contract.description,
+    description: contract.description || undefined,
   };
 }
 
-function formatCurrency(value: number | null): string {
+function formatCurrency(value: unknown): string {
   if (!value) return "TBD";
+  const numValue = typeof value === "string" ? parseFloat(value) :
+                   typeof value === "bigint" ? Number(value) :
+                   typeof value === "number" ? value :
+                   Number(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(value);
+  }).format(numValue);
 }
 
 function formatDate(date: Date | null): string {
@@ -143,13 +64,17 @@ function formatDate(date: Date | null): string {
 
 function getSetAsideLabel(type: string | null | undefined): string {
   const labels: Record<string, string> = {
-    small_business: "Small Business Set-Aside",
-    woman_owned: "Women-Owned Small Business (WOSB)",
-    veteran_owned: "Veteran-Owned Small Business (VOSB)",
-    hubzone: "HUBZone Set-Aside",
-    "8a": "8(a) Set-Aside",
-    sdvosb: "Service-Disabled Veteran-Owned (SDVOSB)",
-    none: "Full & Open Competition",
+    SBA: "Small Business Set-Aside",
+    SBP: "Small Business Set-Aside",
+    "8A": "8(a) Set-Aside",
+    "8AN": "8(a) Set-Aside",
+    WOSB: "Women-Owned Small Business (WOSB)",
+    WOSBSS: "Women-Owned Small Business (WOSB)",
+    EDWOSB: "Economically Disadvantaged WOSB",
+    SDVOSBC: "Service-Disabled Veteran-Owned (SDVOSB)",
+    SDVOSBS: "Service-Disabled Veteran-Owned (SDVOSB)",
+    HZC: "HUBZone Set-Aside",
+    HZS: "HUBZone Set-Aside",
   };
   return type ? labels[type] || type : "Full & Open Competition";
 }
@@ -160,11 +85,26 @@ export default async function ContractDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const contract = mockContracts[id];
+  const contract = await prisma.contractLead.findUnique({
+    where: { id },
+  });
 
   if (!contract) {
     notFound();
   }
+
+  // Fetch related contracts (same agency or NAICS codes)
+  const relatedContracts = await prisma.contractLead.findMany({
+    where: {
+      id: { not: contract.id },
+      OR: [
+        { agency: contract.agency },
+        { naicsCodes: { hasSome: contract.naicsCodes } },
+      ],
+    },
+    take: 3,
+    orderBy: { postedDate: "desc" },
+  });
 
   return (
     <div className="container py-8">
@@ -203,6 +143,9 @@ export default async function ContractDetailPage({
             <div className="flex items-center gap-2 text-muted-foreground">
               <Building2 className="h-5 w-5" />
               <span className="text-lg">{contract.agency}</span>
+              {contract.subAgency && (
+                <span className="text-sm">• {contract.subAgency}</span>
+              )}
             </div>
           </div>
 
@@ -214,7 +157,7 @@ export default async function ContractDetailPage({
                   <DollarSign className="h-4 w-4" />
                   <span className="text-sm">Estimated Value</span>
                 </div>
-                <p className="text-2xl font-bold">{formatCurrency(contract.estimatedValue ?? null)}</p>
+                <p className="text-2xl font-bold">{formatCurrency(contract.estimatedValue)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -223,7 +166,7 @@ export default async function ContractDetailPage({
                   <Calendar className="h-4 w-4" />
                   <span className="text-sm">Response Deadline</span>
                 </div>
-                <p className="text-2xl font-bold">{formatDate(contract.responseDeadline ?? null)}</p>
+                <p className="text-2xl font-bold">{formatDate(contract.responseDeadline)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -232,9 +175,35 @@ export default async function ContractDetailPage({
                   <FileText className="h-4 w-4" />
                   <span className="text-sm">Posted Date</span>
                 </div>
-                <p className="text-2xl font-bold">{formatDate(contract.postedDate ?? null)}</p>
+                <p className="text-2xl font-bold">{formatDate(contract.postedDate)}</p>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Additional Info */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {contract.solicitationNumber && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Hash className="h-4 w-4" />
+                    <span className="text-sm">Solicitation Number</span>
+                  </div>
+                  <p className="font-medium">{contract.solicitationNumber}</p>
+                </CardContent>
+              </Card>
+            )}
+            {contract.placeOfPerformance && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <MapPin className="h-4 w-4" />
+                    <span className="text-sm">Place of Performance</span>
+                  </div>
+                  <p className="font-medium">{contract.placeOfPerformance}</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* NAICS Codes */}
@@ -249,6 +218,11 @@ export default async function ContractDetailPage({
                     {code}
                   </Badge>
                 ))}
+                {contract.pscCode && (
+                  <Badge variant="outline" className="text-sm">
+                    PSC: {contract.pscCode}
+                  </Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -260,12 +234,35 @@ export default async function ContractDetailPage({
             </CardHeader>
             <CardContent>
               <div className="prose prose-sm max-w-none dark:prose-invert">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                  {contract.fullDescription}
-                </pre>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {contract.description || "No description available."}
+                </p>
               </div>
             </CardContent>
           </Card>
+
+          {/* Contract Details */}
+          {(contract.noticeType || contract.contractType) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Contract Details</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                {contract.noticeType && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Notice Type</p>
+                    <p className="font-medium">{contract.noticeType}</p>
+                  </div>
+                )}
+                {contract.contractType && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Contract Type</p>
+                    <p className="font-medium">{contract.contractType}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -276,12 +273,14 @@ export default async function ContractDetailPage({
               <CardTitle className="text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full" asChild>
-                <a href={contract.sourceUrl ?? undefined} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  View on SAM.gov
-                </a>
-              </Button>
+              {contract.sourceUrl && (
+                <Button className="w-full" asChild>
+                  <a href={contract.sourceUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    View on {contract.source}
+                  </a>
+                </Button>
+              )}
               <Button variant="outline" className="w-full">
                 <Bell className="mr-2 h-4 w-4" />
                 Set Alert for Similar
@@ -289,58 +288,31 @@ export default async function ContractDetailPage({
             </CardContent>
           </Card>
 
-          {/* Contact Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Contact Information</CardTitle>
-              <CardDescription>Primary point of contact</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm text-muted-foreground">Name</p>
-                <p className="font-medium">{contract.contactInfo.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Email</p>
-                <a
-                  href={`mailto:${contract.contactInfo.email}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {contract.contactInfo.email}
-                </a>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Phone</p>
-                <a
-                  href={`tel:${contract.contactInfo.phone}`}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {contract.contactInfo.phone}
-                </a>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Related Contracts */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Related Opportunities</CardTitle>
-              <CardDescription>Similar contracts you may be interested in</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Link
-                href="/contracts/2"
-                className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-              >
-                <p className="font-medium text-sm line-clamp-2">
-                  Cybersecurity Assessment and Consulting
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  DHS • $1.8M
-                </p>
-              </Link>
-            </CardContent>
-          </Card>
+          {relatedContracts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Related Opportunities</CardTitle>
+                <CardDescription>Similar contracts you may be interested in</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {relatedContracts.map((related) => (
+                  <Link
+                    key={related.id}
+                    href={`/contracts/${related.id}`}
+                    className="block p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <p className="font-medium text-sm line-clamp-2">
+                      {related.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {related.agency} • {formatCurrency(related.estimatedValue)}
+                    </p>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
