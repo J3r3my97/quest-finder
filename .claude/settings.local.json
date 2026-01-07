@@ -29,7 +29,11 @@
       "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma migrate dev:*)",
       "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma db push:*)",
       "Bash(xargs:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:www.commbuys.com)",
+      "WebSearch",
+      "WebFetch(domain:www.mass.gov)",
+      "WebFetch(domain:www.boston.gov)"
     ]
   }
 }

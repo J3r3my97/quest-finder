@@ -1,8 +1,9 @@
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { CommbuysOpportunity } from '@/types';
 
-const COMMBUYS_BASE_URL = 'https://www.commbuys.com';
-const COMMBUYS_BIDS_URL = `${COMMBUYS_BASE_URL}/bso/external/publicBids.sdo`;
+// Using City of Boston bids (easier to scrape than COMMBUYS)
+const BOSTON_BIDS_URL = 'https://www.boston.gov/bid-listings';
+const BOSTON_BASE_URL = 'https://www.boston.gov';
 
 // Lazy initialization for Firecrawl client
 let firecrawlInstance: FirecrawlApp | null = null;
@@ -36,131 +37,80 @@ export class CommbuysApiError extends Error {
 }
 
 /**
- * Parse opportunity data from scraped markdown/HTML content
+ * Parse opportunity data from Boston.gov bid listings markdown
+ * Format: Title (optional ID), Posted date, Deadline, Department, Contact
  */
 function parseOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
   const opportunities: CommbuysOpportunity[] = [];
+  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // COMMBUYS typically displays bids in a table format
-  // We'll parse the content to extract bid information
-  // The exact parsing depends on the page structure
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
 
-  // Look for bid patterns - COMMBUYS uses bid IDs like "BD-XX-XXXX-XXXXX"
-  const bidIdPattern = /BD-\d{2}-\d{4}-[A-Z0-9]+/g;
-  const bidIds = content.match(bidIdPattern) || [];
+    // Look for bid titles - they're usually followed by Posted/Deadline info
+    // Boston format: "**Title** (EV00016951)" or just "**Title**"
+    const titleMatch = line.match(/\*\*(.+?)\*\*(?:\s*\(([A-Z0-9]+)\))?/);
 
-  // Extract unique bid IDs
-  const uniqueBidIds = [...new Set(bidIds)];
+    if (titleMatch) {
+      const title = titleMatch[1].trim();
+      const bidId = titleMatch[2] || `BOSTON-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Parse the content line by line to extract structured data
-  const lines = content.split('\n');
-  let currentOpportunity: Partial<CommbuysOpportunity> | null = null;
+      let postedDate: string | null = null;
+      let dueDate: string | null = null;
+      let agency: string = 'City of Boston';
+      let contact: string | null = null;
+      let url: string | null = null;
 
-  for (const line of lines) {
-    const trimmedLine = line.trim();
+      // Look at next few lines for metadata
+      for (let j = 1; j <= 6 && i + j < lines.length; j++) {
+        const nextLine = lines[i + j];
 
-    // Check if this line contains a bid ID
-    const bidIdMatch = trimmedLine.match(/BD-\d{2}-\d{4}-[A-Z0-9]+/);
-    if (bidIdMatch) {
-      // Save previous opportunity if exists
-      if (currentOpportunity && currentOpportunity.bidId) {
-        opportunities.push({
-          bidId: currentOpportunity.bidId,
-          title: currentOpportunity.title || 'Untitled',
-          description: currentOpportunity.description || null,
-          agency: currentOpportunity.agency || 'Commonwealth of Massachusetts',
-          category: currentOpportunity.category || null,
-          postedDate: currentOpportunity.postedDate || null,
-          dueDate: currentOpportunity.dueDate || null,
-          status: currentOpportunity.status || null,
-          url: currentOpportunity.url || `${COMMBUYS_BASE_URL}/bso/external/bidDetail.sdo?bidId=${currentOpportunity.bidId}`,
-        });
+        // Posted date
+        const postedMatch = nextLine.match(/Posted[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+        if (postedMatch) postedDate = postedMatch[1];
+
+        // Deadline
+        const deadlineMatch = nextLine.match(/Deadline[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+        if (deadlineMatch) dueDate = deadlineMatch[1];
+
+        // Department
+        const deptMatch = nextLine.match(/Department[:\s]*(.+)/i);
+        if (deptMatch) agency = `City of Boston - ${deptMatch[1].trim()}`;
+
+        // Contact
+        const contactMatch = nextLine.match(/Contact[:\s]*(.+)/i);
+        if (contactMatch) contact = contactMatch[1].trim();
+
+        // URL - look for links
+        const urlMatch = nextLine.match(/\[.*?\]\((https?:\/\/[^\)]+)\)/);
+        if (urlMatch) url = urlMatch[1];
+
+        // Stop if we hit another title
+        if (nextLine.match(/\*\*(.+?)\*\*/)) break;
       }
 
-      currentOpportunity = {
-        bidId: bidIdMatch[0],
-        agency: 'Commonwealth of Massachusetts',
-      };
-
-      // The title often follows the bid ID on the same line or nearby
-      const afterBidId = trimmedLine.substring(trimmedLine.indexOf(bidIdMatch[0]) + bidIdMatch[0].length).trim();
-      if (afterBidId && afterBidId.length > 3) {
-        currentOpportunity.title = afterBidId.replace(/^[-|:]\s*/, '');
-      }
-    }
-
-    // Look for date patterns (MM/DD/YYYY or YYYY-MM-DD)
-    if (currentOpportunity) {
-      const datePattern = /(\d{1,2}\/\d{1,2}\/\d{4})|(\d{4}-\d{2}-\d{2})/g;
-      const dates = trimmedLine.match(datePattern);
-
-      if (dates && dates.length > 0) {
-        // First date is usually posted date, second is due date
-        if (!currentOpportunity.postedDate && dates[0]) {
-          currentOpportunity.postedDate = dates[0];
-        }
-        if (!currentOpportunity.dueDate && dates[1]) {
-          currentOpportunity.dueDate = dates[1];
-        } else if (!currentOpportunity.dueDate && dates[0] && trimmedLine.toLowerCase().includes('due')) {
-          currentOpportunity.dueDate = dates[0];
-        }
-      }
-
-      // Look for agency names
-      if (trimmedLine.includes('Department') || trimmedLine.includes('Office of') || trimmedLine.includes('Division')) {
-        if (!currentOpportunity.agency || currentOpportunity.agency === 'Commonwealth of Massachusetts') {
-          currentOpportunity.agency = trimmedLine.substring(0, 100); // Limit length
-        }
-      }
-
-      // Look for status
-      const statusPatterns = ['Open', 'Closed', 'Active', 'Awarded', 'Pending'];
-      for (const status of statusPatterns) {
-        if (trimmedLine.includes(status)) {
-          currentOpportunity.status = status;
-          break;
-        }
-      }
-    }
-  }
-
-  // Don't forget the last opportunity
-  if (currentOpportunity && currentOpportunity.bidId) {
-    opportunities.push({
-      bidId: currentOpportunity.bidId,
-      title: currentOpportunity.title || 'Untitled',
-      description: currentOpportunity.description || null,
-      agency: currentOpportunity.agency || 'Commonwealth of Massachusetts',
-      category: currentOpportunity.category || null,
-      postedDate: currentOpportunity.postedDate || null,
-      dueDate: currentOpportunity.dueDate || null,
-      status: currentOpportunity.status || null,
-      url: currentOpportunity.url || `${COMMBUYS_BASE_URL}/bso/external/bidDetail.sdo?bidId=${currentOpportunity.bidId}`,
-    });
-  }
-
-  // If we couldn't parse structured data, create entries from unique bid IDs
-  if (opportunities.length === 0 && uniqueBidIds.length > 0) {
-    for (const bidId of uniqueBidIds) {
       opportunities.push({
         bidId,
-        title: 'Untitled Opportunity',
-        description: null,
-        agency: 'Commonwealth of Massachusetts',
+        title,
+        description: contact ? `Contact: ${contact}` : null,
+        agency,
         category: null,
-        postedDate: null,
-        dueDate: null,
-        status: null,
-        url: `${COMMBUYS_BASE_URL}/bso/external/bidDetail.sdo?bidId=${bidId}`,
+        postedDate,
+        dueDate,
+        status: 'Open',
+        url: url || `${BOSTON_BASE_URL}/bid-listings`,
       });
     }
+
+    i++;
   }
 
   return opportunities;
 }
 
 /**
- * Fetch raw opportunities from COMMBUYS using Firecrawl
+ * Fetch raw opportunities from Boston.gov using Firecrawl
  */
 async function fetchRawCommbuysOpportunities(
   limit: number = 25
@@ -168,20 +118,20 @@ async function fetchRawCommbuysOpportunities(
   const client = getFirecrawl();
 
   try {
-    const result = await client.scrapeUrl(COMMBUYS_BIDS_URL, {
-      formats: ['markdown', 'html'],
+    const result = await client.scrapeUrl(BOSTON_BIDS_URL, {
+      formats: ['markdown'],
     });
 
     if (!result.success) {
       throw new CommbuysApiError(
-        'Failed to scrape COMMBUYS',
+        'Failed to scrape Boston.gov bids',
         undefined,
         result
       );
     }
 
     // Parse opportunities from the scraped content
-    const content = result.markdown || result.html || '';
+    const content = result.markdown || '';
     const opportunities = parseOpportunitiesFromContent(content);
 
     // Return limited results
@@ -191,7 +141,7 @@ async function fetchRawCommbuysOpportunities(
       throw error;
     }
     throw new CommbuysApiError(
-      `Failed to fetch from COMMBUYS: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to fetch from Boston.gov: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }
@@ -236,13 +186,13 @@ export function normalizeCommbuysOpportunity(opportunity: CommbuysOpportunity) {
     noticeType: opportunity.status || null,
     naicsCodes: [] as string[],
     pscCode: null,
-    placeOfPerformance: 'Massachusetts',
+    placeOfPerformance: 'Boston, Massachusetts',
     postedDate: parseDate(opportunity.postedDate),
     responseDeadline: parseDate(opportunity.dueDate),
     archiveDate: null,
     sourceUrl: opportunity.url,
     sourceId: opportunity.bidId,
-    source: 'COMMBUYS' as const,
+    source: 'BOSTON_GOV' as const,
     awardAmount: null,
   };
 }
