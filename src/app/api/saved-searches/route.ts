@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ContractSearchFilters } from '@/types';
 import { Prisma } from '@/generated/prisma';
+import { auth } from '@/lib/auth';
 
-// TODO: Replace with actual auth middleware
 async function getCurrentUserId(): Promise<string | null> {
-  // Placeholder - implement with NextAuth.js session
-  return null;
+  const session = await auth();
+  return session?.user?.id ?? null;
 }
 
 export async function GET() {

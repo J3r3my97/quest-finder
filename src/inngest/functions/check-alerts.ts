@@ -1,5 +1,6 @@
 import { inngest } from '@/lib/inngest';
 import { prisma } from '@/lib/prisma';
+import { resend } from '@/lib/resend';
 import { ContractSearchFilters } from '@/types';
 import { Prisma } from '@/generated/prisma';
 
@@ -169,29 +170,80 @@ export const sendAlert = inngest.createFunction(
 
     // Send email notification
     await step.run('send-email', async () => {
-      // In production, integrate with email service (Resend, SendGrid, etc.)
-      // For now, just log the notification
-      logger.info('Sending alert notification', {
-        to: alert.user.email,
-        searchName: alert.savedSearch.name,
-        matchCount: contracts.length,
-        contracts: contracts.map((c) => ({
-          title: c.title,
-          agency: c.agency,
-          deadline: c.responseDeadline,
-        })),
-      });
+      if (!alert.user.email) {
+        logger.warn('User has no email address', { userId: alert.userId });
+        return { sent: false, reason: 'No email address' };
+      }
 
-      // TODO: Integrate with email service
-      // Example with Resend:
-      // await resend.emails.send({
-      //   from: 'alerts@questfinder.com',
-      //   to: alert.user.email!,
-      //   subject: `${contracts.length} new contracts match "${alert.savedSearch.name}"`,
-      //   html: buildEmailHtml(alert, contracts),
-      // });
+      const contractList = contracts
+        .map((c) => {
+          const deadline = c.responseDeadline
+            ? new Date(c.responseDeadline).toLocaleDateString()
+            : 'No deadline';
+          const value = c.estimatedValue
+            ? `$${Number(c.estimatedValue).toLocaleString()}`
+            : 'Not specified';
+          return `
+            <tr>
+              <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                <strong>${c.title}</strong><br/>
+                <span style="color: #666;">${c.agency}</span>
+              </td>
+              <td style="padding: 12px; border-bottom: 1px solid #eee;">${deadline}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #eee;">${value}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                ${c.sourceUrl ? `<a href="${c.sourceUrl}">View</a>` : '-'}
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
 
-      return { sent: true };
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>New Contract Matches</h2>
+          <p>Your saved search "<strong>${alert.savedSearch.name}</strong>" has ${contracts.length} new matching contract${contracts.length === 1 ? '' : 's'}.</p>
+
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background: #f5f5f5;">
+                <th style="padding: 12px; text-align: left;">Contract</th>
+                <th style="padding: 12px; text-align: left;">Deadline</th>
+                <th style="padding: 12px; text-align: left;">Est. Value</th>
+                <th style="padding: 12px; text-align: left;">Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${contractList}
+            </tbody>
+          </table>
+
+          <p style="margin-top: 20px;">
+            <a href="https://quests.aurafarmer.co/search" style="background: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+              View All Contracts
+            </a>
+          </p>
+
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            You received this email because you have alerts enabled for this saved search.
+            <a href="https://quests.aurafarmer.co/saved-searches">Manage your alerts</a>
+          </p>
+        </div>
+      `;
+
+      try {
+        await resend.emails.send({
+          from: 'Quest Finder <alerts@quests.aurafarmer.co>',
+          to: alert.user.email,
+          subject: `${contracts.length} new contract${contracts.length === 1 ? '' : 's'} match "${alert.savedSearch.name}"`,
+          html,
+        });
+        logger.info('Alert email sent', { to: alert.user.email, matchCount: contracts.length });
+        return { sent: true };
+      } catch (error) {
+        logger.error('Failed to send alert email', { error, to: alert.user.email });
+        throw error;
+      }
     });
 
     return {

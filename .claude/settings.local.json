@@ -23,7 +23,12 @@
       "Bash(curl:*)",
       "Bash(pkill:*)",
       "Bash(git push:*)",
-      "Bash(npx next build)"
+      "Bash(npx next build)",
+      "Bash(npx vercel:*)",
+      "Bash(source:*)",
+      "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma migrate dev:*)",
+      "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma db push:*)",
+      "Bash(xargs:*)"
     ]
   }
 }
