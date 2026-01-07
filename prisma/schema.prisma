@@ -201,6 +201,13 @@ model CompanyProfile {
   minContractValue Decimal? @db.Decimal(15, 2)
   maxContractValue Decimal? @db.Decimal(15, 2)
 
+  // Alert settings
+  alertsEnabled    Boolean        @default(false)
+  alertFrequency   AlertFrequency @default(DAILY)
+  lastAlertSentAt  DateTime?
+  lastAlertMatches Int            @default(0)
+  minMatchScore    Int            @default(50) // Minimum score to trigger alert
+
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -208,6 +215,7 @@ model CompanyProfile {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([alertsEnabled, alertFrequency])
   @@map("company_profiles")
 }
 

@@ -73,6 +73,10 @@ export default function ProfilePage() {
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [minValue, setMinValue] = useState("");
   const [maxValue, setMaxValue] = useState("");
+  // Alert settings
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [alertFrequency, setAlertFrequency] = useState<"REALTIME" | "DAILY" | "WEEKLY">("DAILY");
+  const [minMatchScore, setMinMatchScore] = useState(50);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -96,6 +100,10 @@ export default function ProfilePage() {
             setSelectedStates(profile.preferredStates || []);
             setMinValue(profile.minContractValue?.toString() || "");
             setMaxValue(profile.maxContractValue?.toString() || "");
+            // Alert settings
+            setAlertsEnabled(profile.alertsEnabled || false);
+            setAlertFrequency(profile.alertFrequency || "DAILY");
+            setMinMatchScore(profile.minMatchScore || 50);
           }
         }
       } catch (error) {
@@ -126,6 +134,10 @@ export default function ProfilePage() {
           preferredStates: selectedStates,
           minContractValue: minValue ? parseFloat(minValue) : null,
           maxContractValue: maxValue ? parseFloat(maxValue) : null,
+          // Alert settings
+          alertsEnabled,
+          alertFrequency,
+          minMatchScore,
         }),
       });
 
@@ -410,6 +422,70 @@ export default function ProfilePage() {
                         />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Alert Settings */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base">Profile Alerts</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Get notified when new contracts match your profile
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={alertsEnabled}
+                          onChange={(e) => setAlertsEnabled(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    {alertsEnabled && (
+                      <div className="space-y-4 pl-4 border-l-2 border-blue-200">
+                        <div className="space-y-2">
+                          <Label>Alert Frequency</Label>
+                          <div className="flex gap-2">
+                            {(["REALTIME", "DAILY", "WEEKLY"] as const).map((freq) => (
+                              <Badge
+                                key={freq}
+                                variant={alertFrequency === freq ? "default" : "outline"}
+                                className="cursor-pointer"
+                                onClick={() => setAlertFrequency(freq)}
+                              >
+                                {freq === "REALTIME" ? "Real-time" : freq.charAt(0) + freq.slice(1).toLowerCase()}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {alertFrequency === "REALTIME"
+                              ? "Get alerts as soon as matching contracts are found"
+                              : alertFrequency === "DAILY"
+                              ? "Get a daily digest of new matching contracts"
+                              : "Get a weekly summary of new matching contracts"}
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Minimum Match Score: {minMatchScore}%</Label>
+                          <input
+                            type="range"
+                            min="30"
+                            max="90"
+                            step="10"
+                            value={minMatchScore}
+                            onChange={(e) => setMinMatchScore(parseInt(e.target.value))}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Only alert for contracts with at least {minMatchScore}% match score
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

@@ -49,6 +49,10 @@ interface CompanyProfileBody {
   preferredStates: string[];
   minContractValue?: number | null;
   maxContractValue?: number | null;
+  // Alert settings
+  alertsEnabled?: boolean;
+  alertFrequency?: 'REALTIME' | 'DAILY' | 'WEEKLY';
+  minMatchScore?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -78,6 +82,10 @@ export async function POST(request: NextRequest) {
         preferredStates: body.preferredStates || [],
         minContractValue: body.minContractValue ?? null,
         maxContractValue: body.maxContractValue ?? null,
+        // Alert settings
+        ...(body.alertsEnabled !== undefined && { alertsEnabled: body.alertsEnabled }),
+        ...(body.alertFrequency && { alertFrequency: body.alertFrequency }),
+        ...(body.minMatchScore !== undefined && { minMatchScore: body.minMatchScore }),
       },
       create: {
         userId,
@@ -87,6 +95,10 @@ export async function POST(request: NextRequest) {
         preferredStates: body.preferredStates || [],
         minContractValue: body.minContractValue ?? null,
         maxContractValue: body.maxContractValue ?? null,
+        // Alert settings
+        alertsEnabled: body.alertsEnabled ?? false,
+        alertFrequency: body.alertFrequency ?? 'DAILY',
+        minMatchScore: body.minMatchScore ?? 50,
       },
     });
 

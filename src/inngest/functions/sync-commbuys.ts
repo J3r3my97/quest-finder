@@ -101,6 +101,12 @@ export const syncCommbuys = inngest.createFunction(
       data: {},
     });
 
+    // Step 4: Trigger profile-based alert checks
+    await step.sendEvent('trigger-profile-alert-check', {
+      name: 'profile-alerts/check',
+      data: {},
+    });
+
     logger.info('COMMBUYS sync completed', stats);
     return {
       success: true,
