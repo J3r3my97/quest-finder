@@ -9,8 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Technology Stack
 
 - **Framework**: Next.js 16 with App Router, TypeScript, Tailwind CSS v4
+- **UI Components**: shadcn/ui
 - **Database**: PostgreSQL with Prisma ORM v7 (uses @prisma/adapter-pg)
-- **Authentication**: NextAuth.js (to be implemented)
+- **Authentication**: NextAuth.js with credentials provider
 - **Payments**: Stripe (to be implemented)
 
 ## Project Structure
@@ -18,13 +19,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 src/
 ├── app/
+│   ├── (auth)/              # Auth pages (login, signup)
+│   ├── (protected)/         # Protected routes (dashboard, search, profile, saved-searches)
 │   ├── api/
+│   │   ├── auth/            # NextAuth endpoints
 │   │   ├── contracts/       # Contract search & detail endpoints
 │   │   ├── saved-searches/  # User saved search endpoints
 │   │   └── alerts/          # Alert configuration endpoints
-│   └── page.tsx             # Landing page
+│   └── contracts/[id]/      # Contract detail page
+├── components/
+│   ├── layout/              # Navbar, Footer
+│   ├── providers/           # Session provider
+│   └── ui/                  # shadcn/ui components
 ├── generated/prisma/        # Prisma generated client (gitignored)
-├── lib/prisma.ts            # Prisma client singleton with pg adapter
+├── lib/
+│   ├── auth.ts              # NextAuth configuration
+│   ├── prisma.ts            # Prisma client singleton
+│   └── utils.ts             # Utility functions (cn)
 ├── services/sam-gov.ts      # SAM.gov API client with rate limiting
 └── types/index.ts           # Shared TypeScript interfaces
 prisma/
@@ -57,6 +68,7 @@ npx prisma migrate dev --name <migration_name>  # Create migration
 - `GET /api/contracts/[id]` - Get contract details
 - `GET/POST /api/saved-searches` - Manage saved searches (requires auth)
 - `GET/POST /api/alerts` - Manage alerts (requires auth)
+- `POST /api/auth/register` - User registration
 
 ## SAM.gov Integration
 
@@ -72,3 +84,5 @@ Required env var: `SAM_GOV_API_KEY`
 - Prisma v7 requires adapter pattern - uses `@prisma/adapter-pg` with `pg` Pool
 - Generated Prisma files are in `src/generated/prisma/` and excluded from ESLint
 - API routes use lazy Prisma initialization via Proxy to avoid build-time DB connections
+- Protected routes use NextAuth middleware for authentication
+- shadcn/ui components are in `src/components/ui/`

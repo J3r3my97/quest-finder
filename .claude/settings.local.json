@@ -2,17 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(git ls-tree:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git worktree:*)",
+      "Bash(git commit:*)",
+      "Bash(git merge:*)",
       "WebFetch(domain:github.com)",
       "Bash(npx create-next-app:*)",
+      "Bash(npx shadcn@latest:*)",
       "Bash(npm install:*)",
       "Bash(npx prisma:*)",
       "Bash(npm run lint:*)",
       "Bash(npx eslint:*)",
       "Bash(npm run build:*)",
-      "Bash(git add:*)",
-      "Bash(git worktree:*)",
-      "Bash(git commit:*)",
-      "Bash(git merge:*)"
+      "Bash(cat:*)"
     ]
   }
 }

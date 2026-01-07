@@ -1,3 +1,40 @@
+// User types
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  subscriptionTier: SubscriptionTier;
+  createdAt: Date;
+}
+
+export type SubscriptionTier = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
+
+// Contract types
+export interface ContractLead {
+  id: string;
+  title: string;
+  agency: string;
+  subAgency?: string | null;
+  description?: string | null;
+  solicitationNumber?: string | null;
+  noticeType?: string | null;
+  contractType?: string | null;
+  estimatedValue?: number | null;
+  awardAmount?: number | null;
+  naicsCodes: string[];
+  pscCode?: string | null;
+  setAsideType?: string | null;
+  placeOfPerformance?: string | null;
+  postedDate?: Date | null;
+  responseDeadline?: Date | null;
+  archiveDate?: Date | null;
+  sourceUrl?: string | null;
+  sourceId?: string | null;
+  source: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Search filter types for contracts
 export interface ContractSearchFilters {
   keyword?: string;
@@ -22,6 +59,31 @@ export interface PaginationParams {
   sortOrder?: 'asc' | 'desc';
 }
 
+// Search types
+export interface SavedSearch {
+  id: string;
+  userId: string;
+  name: string;
+  filters: ContractSearchFilters;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Alert types
+export interface Alert {
+  id: string;
+  userId: string;
+  savedSearchId: string;
+  frequency: AlertFrequency;
+  isActive: boolean;
+  lastSentAt: Date | null;
+  lastMatchCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type AlertFrequency = 'REALTIME' | 'DAILY' | 'WEEKLY';
+
 // API response types
 export interface PaginatedResponse<T> {
   data: T[];
@@ -31,6 +93,11 @@ export interface PaginatedResponse<T> {
     total: number;
     totalPages: number;
   };
+}
+
+export interface ApiError {
+  message: string;
+  code?: string;
 }
 
 // SAM.gov API types
@@ -116,7 +183,8 @@ export const SET_ASIDE_TYPES = [
   'VSB',
 ] as const;
 
-export type SetAsideType = (typeof SET_ASIDE_TYPES)[number];
+export type SetAsideTypeCode = (typeof SET_ASIDE_TYPES)[number];
+export type SetAsideType = SetAsideTypeCode;
 
 // Notice types
 export const NOTICE_TYPES = [
