@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add button card input label select dropdown-menu avatar badge skeleton toast sheet dialog form -y)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+}
