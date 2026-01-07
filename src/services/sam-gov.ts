@@ -8,22 +8,42 @@ const SAM_GOV_API_URL =
   process.env.SAM_GOV_API_URL || 'https://api.sam.gov/prod/opportunities/v2/search';
 const SAM_GOV_API_KEY = process.env.SAM_GOV_API_KEY || '';
 
-// Rate limiting: SAM.gov allows 10 requests per second
-const RATE_LIMIT_DELAY_MS = 100;
-let lastRequestTime = 0;
+// Rate limiting: SAM.gov has strict limits, use longer delay in serverless
+const RATE_LIMIT_DELAY_MS = 1000; // 1 second between requests
+const MAX_RETRIES = 3;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function rateLimitedFetch(url: string, options: RequestInit): Promise<Response> {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
+  let lastError: Error | null = null;
 
-  if (timeSinceLastRequest < RATE_LIMIT_DELAY_MS) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, RATE_LIMIT_DELAY_MS - timeSinceLastRequest)
-    );
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // Wait before each request (longer for retries)
+    if (attempt > 0) {
+      const backoffMs = RATE_LIMIT_DELAY_MS * Math.pow(2, attempt);
+      await sleep(backoffMs);
+    } else {
+      await sleep(RATE_LIMIT_DELAY_MS);
+    }
+
+    const response = await fetch(url, options);
+
+    // If rate limited, retry with backoff
+    if (response.status === 429) {
+      lastError = new Error('Rate limited');
+      continue;
+    }
+
+    return response;
   }
 
-  lastRequestTime = Date.now();
-  return fetch(url, options);
+  throw new SamGovApiError(
+    'SAM.gov API rate limit exceeded after retries',
+    429,
+    lastError?.message
+  );
 }
 
 export class SamGovApiError extends Error {
