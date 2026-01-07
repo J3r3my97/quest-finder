@@ -8,9 +8,9 @@ const SAM_GOV_API_URL =
   process.env.SAM_GOV_API_URL || 'https://api.sam.gov/prod/opportunities/v2/search';
 const SAM_GOV_API_KEY = process.env.SAM_GOV_API_KEY || '';
 
-// Rate limiting: SAM.gov has strict limits, use longer delay in serverless
-const RATE_LIMIT_DELAY_MS = 1000; // 1 second between requests
-const MAX_RETRIES = 3;
+// Rate limiting: SAM.gov has very strict limits
+const RATE_LIMIT_DELAY_MS = 3000; // 3 seconds between requests
+const MAX_RETRIES = 5;
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,23 +20,28 @@ async function rateLimitedFetch(url: string, options: RequestInit): Promise<Resp
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    // Wait before each request (longer for retries)
-    if (attempt > 0) {
-      const backoffMs = RATE_LIMIT_DELAY_MS * Math.pow(2, attempt);
-      await sleep(backoffMs);
-    } else {
-      await sleep(RATE_LIMIT_DELAY_MS);
-    }
+    // Wait before each request (exponential backoff)
+    const waitTime = attempt === 0
+      ? RATE_LIMIT_DELAY_MS
+      : RATE_LIMIT_DELAY_MS * Math.pow(2, attempt); // 3s, 6s, 12s, 24s, 48s
 
-    const response = await fetch(url, options);
+    await sleep(waitTime);
 
-    // If rate limited, retry with backoff
-    if (response.status === 429) {
-      lastError = new Error('Rate limited');
+    try {
+      const response = await fetch(url, options);
+
+      // If rate limited, retry with backoff
+      if (response.status === 429) {
+        console.log(`SAM.gov rate limited, attempt ${attempt + 1}/${MAX_RETRIES}, waiting ${waitTime * 2}ms`);
+        lastError = new Error('Rate limited');
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Unknown error');
       continue;
     }
-
-    return response;
   }
 
   throw new SamGovApiError(
@@ -269,10 +274,10 @@ export function normalizeOpportunity(opportunity: SamGovOpportunity) {
  */
 export async function fetchAllOpportunities(
   filters: ContractSearchFilters,
-  maxResults = 1000
+  maxResults = 100
 ): Promise<ReturnType<typeof normalizeOpportunity>[]> {
   const results: ReturnType<typeof normalizeOpportunity>[] = [];
-  const pageSize = 100;
+  const pageSize = 25; // Small page size to minimize API calls
   let offset = 0;
 
   while (results.length < maxResults) {
@@ -289,7 +294,8 @@ export async function fetchAllOpportunities(
     const normalized = response.opportunitiesData.map(normalizeOpportunity);
     results.push(...normalized);
 
-    if (response.opportunitiesData.length < pageSize) {
+    // Stop after first page to avoid rate limits during initial sync
+    if (maxResults <= 25 || response.opportunitiesData.length < pageSize) {
       break;
     }
 

@@ -24,7 +24,7 @@ export const syncContracts = inngest.createFunction(
 
       const results = await fetchAllOpportunities({
         postedDateFrom: sevenDaysAgo.toISOString().split('T')[0],
-      }, 100); // Reduced to avoid rate limits
+      }, 25); // Single page to avoid rate limits
 
       logger.info(`Fetched ${results.length} opportunities`);
       return results;
@@ -131,7 +131,7 @@ export const manualSyncContracts = inngest.createFunction(
 
       return fetchAllOpportunities({
         postedDateFrom: sevenDaysAgo.toISOString().split('T')[0],
-      }, 100); // Reduced to avoid rate limits
+      }, 25); // Single page to avoid rate limits
     });
 
     const stats = await step.run('upsert-contracts', async () => {
