@@ -5,7 +5,7 @@ import {
 } from '@/types';
 
 const SAM_GOV_API_URL =
-  process.env.SAM_GOV_API_URL || 'https://api.sam.gov/opportunities/v2/search';
+  process.env.SAM_GOV_API_URL || 'https://api.sam.gov/prod/opportunities/v2/search';
 const SAM_GOV_API_KEY = process.env.SAM_GOV_API_KEY || '';
 
 // Rate limiting: SAM.gov allows 10 requests per second
@@ -44,6 +44,17 @@ interface SamGovSearchParams {
 }
 
 /**
+ * Convert date string (YYYY-MM-DD) to SAM.gov format (MM/dd/yyyy)
+ */
+function toSamGovDateFormat(dateStr: string): string {
+  const date = new Date(dateStr);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+}
+
+/**
  * Build query parameters for SAM.gov API from our filter format
  */
 function buildQueryParams(params: SamGovSearchParams): URLSearchParams {
@@ -64,20 +75,20 @@ function buildQueryParams(params: SamGovSearchParams): URLSearchParams {
     queryParams.set('naics', filters.naicsCodes.join(','));
   }
 
-  // Posted date range
+  // Posted date range (SAM.gov expects MM/dd/yyyy format)
   if (filters.postedDateFrom) {
-    queryParams.set('postedFrom', filters.postedDateFrom);
+    queryParams.set('postedFrom', toSamGovDateFormat(filters.postedDateFrom));
   }
   if (filters.postedDateTo) {
-    queryParams.set('postedTo', filters.postedDateTo);
+    queryParams.set('postedTo', toSamGovDateFormat(filters.postedDateTo));
   }
 
   // Response deadline range
   if (filters.responseDeadlineFrom) {
-    queryParams.set('rdlfrom', filters.responseDeadlineFrom);
+    queryParams.set('rdlfrom', toSamGovDateFormat(filters.responseDeadlineFrom));
   }
   if (filters.responseDeadlineTo) {
-    queryParams.set('rdlto', filters.responseDeadlineTo);
+    queryParams.set('rdlto', toSamGovDateFormat(filters.responseDeadlineTo));
   }
 
   // Set-aside type
