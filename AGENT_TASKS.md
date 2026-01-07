@@ -42,10 +42,11 @@ This document outlines the task assignments for building Quest-Finder, a governm
 - [x] `POST /api/alerts` - Create alert for saved search
 - [ ] Implement authentication middleware (pending NextAuth setup)
 
-#### Phase 5: Background Jobs
-- [ ] Set up job queue (e.g., Inngest or BullMQ)
-- [ ] Implement contract data sync job (daily refresh)
-- [ ] Implement alert notification job
+#### Phase 5: Background Jobs ✅ COMPLETE
+- [x] Set up job queue (Inngest)
+- [x] Implement contract data sync job (daily refresh at 6 AM UTC)
+- [x] Implement alert notification job (hourly check, respects frequency settings)
+- [x] Create admin endpoint for manual sync (`/api/admin/sync-contracts`)
 
 ---
 
@@ -99,10 +100,12 @@ This document outlines the task assignments for building Quest-Finder, a governm
 - [x] Toast notifications for actions
 - [x] Loading skeletons for data fetching states
 
-#### Phase 5: Subscription & Payments
-- [ ] Integrate Stripe checkout
-- [ ] Create pricing page (`/pricing`)
-- [ ] Implement subscription management in profile
+#### Phase 5: Subscription & Payments ✅ COMPLETE
+- [x] Integrate Stripe checkout (`/api/stripe/checkout`)
+- [x] Create pricing page (`/pricing`)
+- [x] Implement subscription management in profile
+- [x] Create Stripe webhook handler (`/api/stripe/webhook`)
+- [x] Create customer portal API (`/api/stripe/portal`)
 - [ ] Add feature gating based on subscription tier
 
 ---

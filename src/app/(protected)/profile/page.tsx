@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,14 +16,67 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { Loader2, User, Mail, Shield, CreditCard, Bell } from "lucide-react";
+import { Loader2, User, Shield, CreditCard, Bell, ExternalLink } from "lucide-react";
 import Link from "next/link";
+
+interface SubscriptionData {
+  tier: string;
+  features: {
+    searchesPerDay: number;
+    savedSearches: number;
+    alerts: boolean;
+    apiAccess: boolean;
+  };
+  subscriptionId: string | null;
+  currentPeriodEnd: string | null;
+  isActive: boolean;
+}
 
 export default function ProfilePage() {
   const { data: session, update } = useSession();
   const [isUpdating, setIsUpdating] = useState(false);
   const [name, setName] = useState(session?.user?.name || "");
   const [email, setEmail] = useState(session?.user?.email || "");
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+  const [openingPortal, setOpeningPortal] = useState(false);
+
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      try {
+        const response = await fetch("/api/stripe/subscription");
+        if (response.ok) {
+          const data = await response.json();
+          setSubscription(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch subscription:", error);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    };
+
+    if (session) {
+      fetchSubscription();
+    }
+  }, [session]);
+
+  const handleOpenBillingPortal = async () => {
+    setOpeningPortal(true);
+    try {
+      const response = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to open billing portal");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
+      setOpeningPortal(false);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,29 +181,92 @@ export default function ProfilePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold">Free Plan</h3>
-                  <Badge variant="secondary">Current</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Limited searches, no alerts
-                </p>
+            {loadingSubscription ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
               </div>
-              <Button asChild>
-                <Link href="/pricing">Upgrade</Link>
-              </Button>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">
+                        {subscription?.tier || "Free"} Plan
+                      </h3>
+                      <Badge variant={subscription?.isActive ? "default" : "secondary"}>
+                        {subscription?.isActive ? "Active" : "Current"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {subscription?.tier === "FREE"
+                        ? "Limited searches, no alerts"
+                        : subscription?.tier === "BASIC"
+                        ? "100 searches/day, alerts enabled"
+                        : subscription?.tier === "PRO"
+                        ? "Unlimited searches, API access"
+                        : subscription?.tier === "ENTERPRISE"
+                        ? "Full access, dedicated support"
+                        : "Limited searches, no alerts"}
+                    </p>
+                    {subscription?.currentPeriodEnd && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Renews on{" "}
+                        {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {subscription?.isActive && (
+                      <Button
+                        variant="outline"
+                        onClick={handleOpenBillingPortal}
+                        disabled={openingPortal}
+                      >
+                        {openingPortal ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                        )}
+                        Manage
+                      </Button>
+                    )}
+                    <Button asChild>
+                      <Link href="/pricing">
+                        {subscription?.tier === "FREE" ? "Upgrade" : "Change Plan"}
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <h4 className="font-medium">Plan Features</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• 10 searches per day</li>
-                <li>• 3 saved searches</li>
-                <li>• Basic filters</li>
-              </ul>
-            </div>
+                <div className="space-y-2">
+                  <h4 className="font-medium">Plan Features</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>
+                      •{" "}
+                      {subscription?.features?.searchesPerDay === -1
+                        ? "Unlimited"
+                        : subscription?.features?.searchesPerDay || 10}{" "}
+                      searches per day
+                    </li>
+                    <li>
+                      •{" "}
+                      {subscription?.features?.savedSearches === -1
+                        ? "Unlimited"
+                        : subscription?.features?.savedSearches || 3}{" "}
+                      saved searches
+                    </li>
+                    <li>
+                      • Alerts:{" "}
+                      {subscription?.features?.alerts ? "Enabled" : "Disabled"}
+                    </li>
+                    <li>
+                      • API Access:{" "}
+                      {subscription?.features?.apiAccess ? "Enabled" : "Disabled"}
+                    </li>
+                  </ul>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

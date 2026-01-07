@@ -20,8 +20,11 @@ model User {
   image         String?
 
   // Subscription
-  subscriptionTier SubscriptionTier @default(FREE)
-  stripeCustomerId String?          @unique
+  subscriptionTier       SubscriptionTier @default(FREE)
+  stripeCustomerId       String?          @unique
+  stripeSubscriptionId   String?          @unique
+  stripePriceId          String?
+  stripeCurrentPeriodEnd DateTime?
 
   // Timestamps
   createdAt DateTime @default(now())
