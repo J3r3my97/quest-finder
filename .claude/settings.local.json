@@ -33,7 +33,13 @@
       "WebFetch(domain:www.commbuys.com)",
       "WebSearch",
       "WebFetch(domain:www.mass.gov)",
-      "WebFetch(domain:www.boston.gov)"
+      "WebFetch(domain:www.boston.gov)",
+      "Bash(ls:*)",
+      "Bash(npx tsx:*)",
+      "Bash(grep:*)",
+      "Bash(npx dotenv:*)",
+      "Bash(set -a)",
+      "Bash(set +a)"
     ]
   }
 }

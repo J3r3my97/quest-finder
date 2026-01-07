@@ -7,7 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Bell, Bookmark, TrendingUp, ArrowRight, Calendar, DollarSign, Building2 } from "lucide-react";
+import { Search, Bell, Bookmark, TrendingUp, ArrowRight, Calendar, DollarSign, Building2, Sparkles, Target } from "lucide-react";
+import { scoreAndSortContracts } from "@/services/match-scoring";
+import { ContractLead, CompanyProfile } from "@/types";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -60,11 +62,60 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  // Fetch user's company profile
+  const companyProfile = await prisma.companyProfile.findUnique({
+    where: { userId: session.user.id },
+  });
+
   // Fetch recent contracts from database
   const recentContracts = await prisma.contractLead.findMany({
     orderBy: { postedDate: "desc" },
     take: 5,
   });
+
+  // Get matched contracts if profile exists
+  let matchedContracts: Array<{ contract: ContractLead; matchScore: number; matchReasons: string[] }> = [];
+  if (companyProfile) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const contractsForMatching = await prisma.contractLead.findMany({
+      where: {
+        postedDate: { gte: thirtyDaysAgo },
+        OR: [
+          { responseDeadline: null },
+          { responseDeadline: { gte: new Date() } },
+        ],
+      },
+      orderBy: { postedDate: "desc" },
+      take: 100,
+    });
+
+    const profileForScoring: CompanyProfile = {
+      id: companyProfile.id,
+      userId: companyProfile.userId,
+      companyName: companyProfile.companyName,
+      naicsCodes: companyProfile.naicsCodes,
+      certifications: companyProfile.certifications,
+      preferredStates: companyProfile.preferredStates,
+      minContractValue: companyProfile.minContractValue
+        ? Number(companyProfile.minContractValue)
+        : null,
+      maxContractValue: companyProfile.maxContractValue
+        ? Number(companyProfile.maxContractValue)
+        : null,
+      createdAt: companyProfile.createdAt,
+      updatedAt: companyProfile.updatedAt,
+    };
+
+    const contractsTyped: ContractLead[] = contractsForMatching.map((c) => ({
+      ...c,
+      estimatedValue: c.estimatedValue ? Number(c.estimatedValue) : null,
+      awardAmount: c.awardAmount ? Number(c.awardAmount) : null,
+    }));
+
+    matchedContracts = scoreAndSortContracts(contractsTyped, profileForScoring, 30).slice(0, 5);
+  }
 
   // Fetch stats
   const totalContracts = await prisma.contractLead.count();
@@ -135,6 +186,95 @@ export default async function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {/* For You Section */}
+      <Card className="mb-8">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-yellow-500" />
+              <div>
+                <CardTitle>For You</CardTitle>
+                <CardDescription>
+                  {companyProfile
+                    ? "Contracts matched to your company profile"
+                    : "Complete your profile to see personalized matches"}
+                </CardDescription>
+              </div>
+            </div>
+            {companyProfile && matchedContracts.length > 0 && (
+              <Badge variant="secondary">{matchedContracts.length} matches</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!companyProfile ? (
+            <div className="text-center py-8">
+              <Target className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="font-medium mb-2">Tell us about your business</h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+                Complete your company profile to get matched with contracts that fit your capabilities, certifications, and preferences.
+              </p>
+              <Button asChild>
+                <Link href="/profile">
+                  Complete Profile
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          ) : matchedContracts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No matching contracts found. Try expanding your profile criteria.</p>
+              <Button variant="outline" className="mt-4" asChild>
+                <Link href="/profile">Update Profile</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {matchedContracts.map(({ contract, matchScore, matchReasons }) => (
+                <div
+                  key={contract.id}
+                  className="flex items-start justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/contracts/${contract.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {contract.title}
+                      </Link>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Building2 className="h-3 w-3" />
+                      {contract.agency}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {matchReasons.map((reason, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {reason}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-right ml-4">
+                    <div className="flex items-center gap-1 justify-end">
+                      <span className="text-2xl font-bold">{matchScore}</span>
+                      <span className="text-xs text-muted-foreground">/ 100</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Match Score</p>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2">
+                <Button variant="outline" className="w-full" asChild>
+                  <Link href="/search">View All Matches</Link>
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Contracts */}
       <div className="grid gap-8 lg:grid-cols-3">
