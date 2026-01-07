@@ -7,10 +7,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL || process.env.quests_store_DATABASE_URL;
 
   if (!connectionString) {
-    throw new Error('DATABASE_URL environment variable is not set');
+    throw new Error('DATABASE_URL or quests_store_DATABASE_URL environment variable is not set');
   }
 
   const pool = new Pool({ connectionString });

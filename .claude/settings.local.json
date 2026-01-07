@@ -22,7 +22,8 @@
       "Bash(npm run db:seed:*)",
       "Bash(curl:*)",
       "Bash(pkill:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx next build)"
     ]
   }
 }

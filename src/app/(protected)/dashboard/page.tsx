@@ -68,10 +68,12 @@ export default async function DashboardPage() {
 
   // Fetch stats
   const totalContracts = await prisma.contractLead.count();
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const contractsThisWeek = await prisma.contractLead.count({
     where: {
       createdAt: {
-        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        gte: oneWeekAgo,
       },
     },
   });

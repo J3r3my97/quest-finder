@@ -1,10 +1,24 @@
 import Stripe from 'stripe';
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set');
+// Lazy initialization to avoid errors during build
+let stripeInstance: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripeInstance;
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Proxy for backwards compatibility
+export const stripe = new Proxy({} as Stripe, {
+  get(_, prop) {
+    return Reflect.get(getStripe(), prop);
+  },
+});
 
 // Price IDs for subscription plans - these should be created in Stripe Dashboard
 export const PRICE_IDS = {

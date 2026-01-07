@@ -1,10 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import type { User } from "@/types";
-
-// Mock user database - in production, this would be replaced with Prisma
-const users: Array<User & { password: string }> = [];
+import { prisma } from "@/lib/prisma";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -22,15 +19,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = credentials.email as string;
         const password = credentials.password as string;
 
-        // Find user by email
-        const user = users.find((u) => u.email === email);
+        // Find user by email in database
+        const user = await prisma.user.findUnique({
+          where: { email },
+        });
 
-        if (!user) {
+        if (!user || !user.passwordHash) {
           return null;
         }
 
         // Verify password
-        const isValid = await bcrypt.compare(password, user.password);
+        const isValid = await bcrypt.compare(password, user.passwordHash);
 
         if (!isValid) {
           return null;
@@ -72,9 +71,12 @@ export async function registerUser(
   email: string,
   password: string,
   name?: string
-): Promise<User | null> {
+) {
   // Check if user already exists
-  const existingUser = users.find((u) => u.email === email);
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+  });
+
   if (existingUser) {
     return null;
   }
@@ -82,27 +84,38 @@ export async function registerUser(
   // Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Create new user
-  const newUser: User & { password: string } = {
-    id: crypto.randomUUID(),
-    email,
-    name: name || null,
-    password: hashedPassword,
-    subscriptionTier: "FREE",
-    createdAt: new Date(),
-  };
+  // Create new user in database
+  const newUser = await prisma.user.create({
+    data: {
+      email,
+      name: name || null,
+      passwordHash: hashedPassword,
+      subscriptionTier: "FREE",
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      subscriptionTier: true,
+      createdAt: true,
+    },
+  });
 
-  users.push(newUser);
-
-  // Return user without password
-  const { password: _, ...userWithoutPassword } = newUser;
-  return userWithoutPassword;
+  return newUser;
 }
 
 // Helper to get user by email (for checking existence)
-export function getUserByEmail(email: string): User | null {
-  const user = users.find((u) => u.email === email);
-  if (!user) return null;
-  const { password: _, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+export async function getUserByEmail(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      subscriptionTier: true,
+      createdAt: true,
+    },
+  });
+
+  return user;
 }
