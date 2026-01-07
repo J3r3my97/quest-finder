@@ -3,6 +3,8 @@ import { inngest } from '@/lib/inngest';
 import {
   syncContracts,
   manualSyncContracts,
+  syncCommbuys,
+  manualSyncCommbuys,
   checkAlerts,
   sendAlert,
   scheduledAlertCheck,
@@ -14,6 +16,8 @@ export const { GET, POST, PUT } = serve({
   functions: [
     syncContracts,
     manualSyncContracts,
+    syncCommbuys,
+    manualSyncCommbuys,
     checkAlerts,
     sendAlert,
     scheduledAlertCheck,

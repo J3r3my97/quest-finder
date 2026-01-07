@@ -28,7 +28,8 @@
       "Bash(source:*)",
       "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma migrate dev:*)",
       "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma db push:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

@@ -199,3 +199,16 @@ export const NOTICE_TYPES = [
 ] as const;
 
 export type NoticeType = (typeof NOTICE_TYPES)[number];
+
+// COMMBUYS (Massachusetts) types
+export interface CommbuysOpportunity {
+  bidId: string;
+  title: string;
+  description: string | null;
+  agency: string;
+  category: string | null;
+  postedDate: string | null;
+  dueDate: string | null;
+  status: string | null;
+  url: string | null;
+}
