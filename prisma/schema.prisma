@@ -1,0 +1,190 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User model for authentication and subscription management
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  emailVerified DateTime?
+  image         String?
+
+  // Subscription
+  subscriptionTier SubscriptionTier @default(FREE)
+  stripeCustomerId String?          @unique
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  savedSearches SavedSearch[]
+  alerts        Alert[]
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+// NextAuth.js Account model
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// NextAuth.js Session model
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// NextAuth.js VerificationToken model
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Government contract opportunity
+model ContractLead {
+  id          String   @id @default(cuid())
+
+  // Core fields
+  title       String
+  description String?  @db.Text
+  agency      String
+  subAgency   String?
+
+  // Contract details
+  solicitationNumber String?  @unique
+  noticeType         String?  // Presolicitation, Combined Synopsis/Solicitation, etc.
+  contractType       String?  // Fixed-price, Cost-reimbursement, etc.
+
+  // Value
+  estimatedValue     Decimal? @db.Decimal(15, 2)
+  awardAmount        Decimal? @db.Decimal(15, 2)
+
+  // Classification
+  naicsCodes    String[] // Array of NAICS codes
+  pscCode       String?  // Product Service Code
+  setAsideType  String?  // Small Business, 8(a), HUBZone, etc.
+
+  // Location
+  placeOfPerformance String?
+
+  // Dates
+  postedDate        DateTime?
+  responseDeadline  DateTime?
+  archiveDate       DateTime?
+
+  // Source
+  sourceUrl   String?
+  sourceId    String?  @unique // ID from SAM.gov or other source
+  source      String   @default("SAM.gov")
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agency])
+  @@index([postedDate])
+  @@index([responseDeadline])
+  @@index([naicsCodes])
+  @@map("contract_leads")
+}
+
+// User's saved search criteria
+model SavedSearch {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+
+  // Search filters stored as JSON
+  filters Json
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alerts Alert[]
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+// Alert configuration for saved searches
+model Alert {
+  id            String @id @default(cuid())
+  userId        String
+  savedSearchId String
+
+  // Alert settings
+  frequency AlertFrequency @default(DAILY)
+  isActive  Boolean        @default(true)
+
+  // Tracking
+  lastSentAt    DateTime?
+  lastMatchCount Int       @default(0)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, savedSearchId])
+  @@index([userId])
+  @@index([isActive, frequency])
+  @@map("alerts")
+}
+
+// Enums
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum AlertFrequency {
+  REALTIME
+  DAILY
+  WEEKLY
+}
