@@ -21,7 +21,8 @@
       "Bash(psql:*)",
       "Bash(npm run db:seed:*)",
       "Bash(curl:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(git push:*)"
     ]
   }
 }
