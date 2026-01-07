@@ -38,72 +38,74 @@ export class CommbuysApiError extends Error {
 
 /**
  * Parse opportunity data from Boston.gov bid listings markdown
- * Format: Title (optional ID), Posted date, Deadline, Department, Contact
+ * Format: [TITLE](/bid-listings/ID) followed by * Posted: and * Due: lines
  */
 function parseOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
   const opportunities: CommbuysOpportunity[] = [];
-  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const lines = content.split('\n');
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
+  let currentBid: Partial<CommbuysOpportunity> | null = null;
 
-    // Look for bid titles - they're usually followed by Posted/Deadline info
-    // Boston format: "**Title** (EV00016951)" or just "**Title**"
-    const titleMatch = line.match(/\*\*(.+?)\*\*(?:\s*\(([A-Z0-9]+)\))?/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // Match bid title links: [Title](/bid-listings/ID "Title") or [Title](/departments/...)
+    // Format: [PROJECT TITLE](/bid-listings/family-overdose-support-fund-0 "PROJECT TITLE")
+    const titleMatch = line.match(/^\[([^\]]+)\]\(\/bid-listings\/([^\s\)]+)/);
 
     if (titleMatch) {
-      const title = titleMatch[1].trim();
-      const bidId = titleMatch[2] || `BOSTON-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      let postedDate: string | null = null;
-      let dueDate: string | null = null;
-      let agency: string = 'City of Boston';
-      let contact: string | null = null;
-      let url: string | null = null;
-
-      // Look at next few lines for metadata
-      for (let j = 1; j <= 6 && i + j < lines.length; j++) {
-        const nextLine = lines[i + j];
-
-        // Posted date
-        const postedMatch = nextLine.match(/Posted[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-        if (postedMatch) postedDate = postedMatch[1];
-
-        // Deadline
-        const deadlineMatch = nextLine.match(/Deadline[:\s]*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-        if (deadlineMatch) dueDate = deadlineMatch[1];
-
-        // Department
-        const deptMatch = nextLine.match(/Department[:\s]*(.+)/i);
-        if (deptMatch) agency = `City of Boston - ${deptMatch[1].trim()}`;
-
-        // Contact
-        const contactMatch = nextLine.match(/Contact[:\s]*(.+)/i);
-        if (contactMatch) contact = contactMatch[1].trim();
-
-        // URL - look for links
-        const urlMatch = nextLine.match(/\[.*?\]\((https?:\/\/[^\)]+)\)/);
-        if (urlMatch) url = urlMatch[1];
-
-        // Stop if we hit another title
-        if (nextLine.match(/\*\*(.+?)\*\*/)) break;
+      // Save previous bid if exists
+      if (currentBid && currentBid.bidId) {
+        opportunities.push(currentBid as CommbuysOpportunity);
       }
 
-      opportunities.push({
+      const title = titleMatch[1].trim();
+      const urlSlug = titleMatch[2].replace(/["'].*$/, '').trim();
+
+      // Extract EV number if present in title or nearby
+      const evMatch = line.match(/\(?(EV\d+)\)?/);
+      const bidId = evMatch ? evMatch[1] : `BOSTON-${urlSlug}`;
+
+      currentBid = {
         bidId,
         title,
-        description: contact ? `Contact: ${contact}` : null,
-        agency,
+        description: null,
+        agency: 'City of Boston',
         category: null,
-        postedDate,
-        dueDate,
+        postedDate: null,
+        dueDate: null,
         status: 'Open',
-        url: url || `${BOSTON_BASE_URL}/bid-listings`,
-      });
+        url: `${BOSTON_BASE_URL}/bid-listings/${urlSlug}`,
+      };
     }
 
-    i++;
+    // Parse Posted date: "* Posted: 01/07/2026" or "Posted: 01/07/2026"
+    if (currentBid) {
+      const postedMatch = line.match(/Posted[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (postedMatch) {
+        currentBid.postedDate = postedMatch[1];
+      }
+
+      // Parse Due date: "* Due: 01/22/2026" or "Due: 01/22/2026"
+      const dueMatch = line.match(/Due[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      if (dueMatch) {
+        currentBid.dueDate = dueMatch[1];
+      }
+
+      // Parse Contact name (usually appears after "Contact:")
+      if (line.match(/^Contact/i) || (lines[i-1] && lines[i-1].match(/Contact/i))) {
+        // Next non-empty line might be contact name
+        const nextLine = lines[i + 1]?.trim();
+        if (nextLine && !nextLine.startsWith('*') && !nextLine.startsWith('[') && nextLine.length > 2) {
+          currentBid.description = `Contact: ${nextLine}`;
+        }
+      }
+    }
+  }
+
+  // Don't forget the last bid
+  if (currentBid && currentBid.bidId) {
+    opportunities.push(currentBid as CommbuysOpportunity);
   }
 
   return opportunities;
