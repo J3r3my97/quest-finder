@@ -17,13 +17,11 @@ import {
   DollarSign,
   Building2,
   ExternalLink,
-  Bookmark,
-  Bell,
-  Share2,
   FileText,
   MapPin,
   Hash,
 } from "lucide-react";
+import { ShareButton } from "@/components/share-button";
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }
@@ -126,16 +124,7 @@ export default async function ContractDetailPage({
               <Badge variant="secondary" className="text-sm">
                 {getSetAsideLabel(contract.setAsideType)}
               </Badge>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm">
-                  <Bookmark className="mr-2 h-4 w-4" />
-                  Save
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Share2 className="mr-2 h-4 w-4" />
-                  Share
-                </Button>
-              </div>
+              <ShareButton title={contract.title} />
             </div>
             <h1 className="text-3xl font-bold tracking-tight mb-2">
               {contract.title}
@@ -268,25 +257,21 @@ export default async function ContractDetailPage({
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {contract.sourceUrl && (
+          {contract.sourceUrl && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <Button className="w-full" asChild>
                   <a href={contract.sourceUrl} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="mr-2 h-4 w-4" />
                     View on {contract.source}
                   </a>
                 </Button>
-              )}
-              <Button variant="outline" className="w-full">
-                <Bell className="mr-2 h-4 w-4" />
-                Set Alert for Similar
-              </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Related Contracts */}
           {relatedContracts.length > 0 && (

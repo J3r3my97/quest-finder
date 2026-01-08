@@ -3,13 +3,11 @@ import { Search } from "lucide-react";
 
 const footerLinks = {
   product: [
-    { label: "Features", href: "/features" },
+    { label: "Search Contracts", href: "/search" },
     { label: "Pricing", href: "/pricing" },
-    { label: "API", href: "/api-docs" },
   ],
   company: [
     { label: "About", href: "/about" },
-    { label: "Blog", href: "/blog" },
     { label: "Contact", href: "/contact" },
   ],
   legal: [

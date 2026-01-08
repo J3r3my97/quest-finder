@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Search, Bell, Filter, BarChart3, Shield, Zap, ArrowRight } from "lucide-react";
 
 const features = [
@@ -43,13 +42,6 @@ const features = [
   },
 ];
 
-const stats = [
-  { value: "500K+", label: "Active Contracts" },
-  { value: "50+", label: "Federal Agencies" },
-  { value: "24/7", label: "Data Updates" },
-  { value: "99.9%", label: "Uptime" },
-];
-
 export default function Home() {
   return (
     <div className="flex flex-col">
@@ -57,9 +49,6 @@ export default function Home() {
       <section className="relative overflow-hidden bg-gradient-to-b from-primary/5 to-background py-20 md:py-32">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
-            <Badge variant="secondary" className="mb-4">
-              Trusted by 1,000+ contractors
-            </Badge>
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
               Find Government Contracts{" "}
               <span className="text-primary">Faster</span>
@@ -80,22 +69,6 @@ export default function Home() {
                 <Link href="/search">Try Demo Search</Link>
               </Button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="border-y bg-muted/50 py-12">
-        <div className="container">
-          <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-3xl font-bold md:text-4xl">{stat.value}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {stat.label}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -139,8 +112,8 @@ export default function Home() {
               Ready to find your next contract?
             </h2>
             <p className="mt-4 text-primary-foreground/80">
-              Join thousands of contractors who use Quest-Finder to discover
-              opportunities and grow their business.
+              Quest-Finder helps you discover government contract opportunities
+              matched to your business profile.
             </p>
             <div className="mt-10">
               <Button size="lg" variant="secondary" asChild>

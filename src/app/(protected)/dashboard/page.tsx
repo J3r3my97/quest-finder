@@ -209,18 +209,23 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent>
           {!companyProfile ? (
-            <div className="text-center py-8">
-              <Target className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="font-medium mb-2">Tell us about your business</h3>
+            <div className="text-center py-6">
+              <Target className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+              <h3 className="font-medium mb-2">Get personalized matches</h3>
               <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
-                Complete your company profile to get matched with contracts that fit your capabilities, certifications, and preferences.
+                Tell us about your business to see contracts matched to your capabilities.
               </p>
-              <Button asChild>
-                <Link href="/profile">
-                  Complete Profile
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Button asChild>
+                  <Link href="/profile">
+                    Complete Profile
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button variant="ghost" asChild>
+                  <Link href="/search">Browse all contracts</Link>
+                </Button>
+              </div>
             </div>
           ) : matchedContracts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
