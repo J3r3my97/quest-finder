@@ -5,9 +5,13 @@ import { CommbuysOpportunity } from '@/types';
 const BOSTON_BIDS_URL = 'https://www.boston.gov/bid-listings';
 const BOSTON_BASE_URL = 'https://www.boston.gov';
 
-// Real COMMBUYS (Massachusetts statewide)
-const COMMBUYS_PUBLIC_BIDS_URL = 'https://www.commbuys.com/bso/external/publicBids.sdo';
-const COMMBUYS_BASE_URL = 'https://www.commbuys.com';
+// City of Worcester bids
+const WORCESTER_BIDS_URL = 'https://www.worcesterma.gov/finance/purchasing-bids/bids/open-bids';
+const WORCESTER_BASE_URL = 'https://www.worcesterma.gov';
+
+// City of Springfield bids
+const SPRINGFIELD_BIDS_URL = 'https://www.springfield-ma.gov/finance/procurement-bids/';
+const SPRINGFIELD_BASE_URL = 'https://www.springfield-ma.gov';
 
 // Lazy initialization for Firecrawl client
 let firecrawlInstance: FirecrawlApp | null = null;
@@ -183,210 +187,161 @@ export async function fetchCommbuysOpportunities(
 }
 
 /**
- * Parse opportunity data from real COMMBUYS public bids page
- * The page typically has a table with columns: Bid ID, Title, Organization, Due Date, etc.
+ * Parse Worcester bid listings from markdown
+ * Format: | Bid Number | Title | Due Date | Department |
  */
-function parseCommbuysOpportunitiesFromContent(content: string): CommbuysOpportunity[] {
+function parseWorcesterOpportunities(content: string): CommbuysOpportunity[] {
   const opportunities: CommbuysOpportunity[] = [];
   const lines = content.split('\n');
 
-  // COMMBUYS format typically includes table rows with bid information
-  // Looking for patterns like:
-  // | Bid ID | Title | Organization | Due Date |
-  // or markdown links to bid details
+  for (const line of lines) {
+    // Match table rows: | 8614-M6 | South Freight Elevator Repairs... | 01/12/2026 - 4:00 PM | Facilities |
+    if (!line.startsWith('|') || line.includes('---')) continue;
 
-  let currentBid: Partial<CommbuysOpportunity> | null = null;
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    // Skip header row
+    if (cells[0].toLowerCase() === 'bid number') continue;
 
-    // Skip empty lines
-    if (!line) continue;
+    const bidId = cells[0];
+    const title = cells[1];
+    const dueDateRaw = cells[2];
 
-    // Match bid links: [BD-XX-XXXX-XXXX...](url) or similar patterns
-    const bidLinkMatch = line.match(/\[(BD-[\w-]+)\]\(([^)]+)\)/i);
-    if (bidLinkMatch) {
-      // Save previous bid
-      if (currentBid && currentBid.bidId) {
-        opportunities.push(currentBid as CommbuysOpportunity);
-      }
+    // Skip if doesn't look like a bid number
+    if (!bidId.match(/^[\w-]+$/)) continue;
 
-      const bidId = bidLinkMatch[1];
-      const url = bidLinkMatch[2].startsWith('http')
-        ? bidLinkMatch[2]
-        : `${COMMBUYS_BASE_URL}${bidLinkMatch[2]}`;
+    // Extract date from "01/12/2026 - 4:00 PM"
+    const dateMatch = dueDateRaw.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+    const dueDate = dateMatch ? dateMatch[1] : null;
 
-      currentBid = {
-        bidId,
-        title: bidId, // Will be overwritten if title found
-        description: null,
-        agency: 'Commonwealth of Massachusetts',
-        category: null,
-        postedDate: null,
-        dueDate: null,
-        status: 'Open',
-        url,
-      };
-      continue;
-    }
+    // Extract department if available
+    const department = cells.length >= 4 ? cells[3] : null;
 
-    // Match standalone bid IDs (BD-XX-XXXX format)
-    const bidIdMatch = line.match(/^(BD-[\w-]+)/i);
-    if (bidIdMatch && !currentBid) {
-      currentBid = {
-        bidId: bidIdMatch[1],
-        title: bidIdMatch[1],
-        description: null,
-        agency: 'Commonwealth of Massachusetts',
-        category: null,
-        postedDate: null,
-        dueDate: null,
-        status: 'Open',
-        url: `${COMMBUYS_BASE_URL}/bso/external/bidDetail.sdo?bidId=${bidIdMatch[1]}`,
-      };
-      continue;
-    }
-
-    // If we have a current bid, try to extract more info
-    if (currentBid) {
-      // Look for title (usually follows the bid ID)
-      if (currentBid.title === currentBid.bidId && line.length > 10 && !line.startsWith('|') && !line.startsWith('-')) {
-        // Likely a title line
-        const cleanTitle = line.replace(/^\*+|\*+$/g, '').trim();
-        if (cleanTitle && !cleanTitle.match(/^(BD-|Due|Posted|Open|Close)/i)) {
-          currentBid.title = cleanTitle;
-        }
-      }
-
-      // Look for organization/agency
-      const orgMatch = line.match(/(?:Organization|Agency|Department):\s*(.+)/i);
-      if (orgMatch) {
-        currentBid.agency = orgMatch[1].trim();
-      }
-
-      // Look for due date patterns
-      const dueDateMatch = line.match(/(?:Due|Deadline|Close[sd]?):\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-      if (dueDateMatch) {
-        currentBid.dueDate = dueDateMatch[1];
-      }
-
-      // Also check for date on same line as "Due Date"
-      const dueDateAlt = line.match(/(\d{1,2}\/\d{1,2}\/\d{2,4}).*(?:due|deadline)/i);
-      if (dueDateAlt && !currentBid.dueDate) {
-        currentBid.dueDate = dueDateAlt[1];
-      }
-
-      // Look for posted date
-      const postedMatch = line.match(/(?:Posted|Published|Open):\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-      if (postedMatch) {
-        currentBid.postedDate = postedMatch[1];
-      }
-
-      // Check for table row format: | value | value | value |
-      if (line.startsWith('|') && line.includes('|')) {
-        const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-        // Try to identify what each cell contains
-        for (const cell of cells) {
-          // Date pattern
-          const dateMatch = cell.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})$/);
-          if (dateMatch) {
-            if (!currentBid.dueDate) {
-              currentBid.dueDate = dateMatch[1];
-            } else if (!currentBid.postedDate) {
-              currentBid.postedDate = dateMatch[1];
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Don't forget last bid
-  if (currentBid && currentBid.bidId) {
-    opportunities.push(currentBid as CommbuysOpportunity);
+    opportunities.push({
+      bidId: `WORC-${bidId}`,
+      title,
+      description: department ? `Department: ${department}` : null,
+      agency: 'City of Worcester',
+      category: department,
+      postedDate: null,
+      dueDate,
+      status: 'Open',
+      url: `${WORCESTER_BASE_URL}/finance/purchasing-bids/bids/${bidId.toLowerCase()}`,
+    });
   }
 
   return opportunities;
 }
 
 /**
- * Fetch opportunities from real COMMBUYS (Massachusetts statewide)
+ * Fetch opportunities from Worcester, MA
  */
-async function fetchRealCommbuysOpportunities(
-  limit: number = 50
-): Promise<CommbuysOpportunity[]> {
+async function fetchWorcesterOpportunities(limit: number = 25): Promise<CommbuysOpportunity[]> {
   const client = getFirecrawl();
 
   try {
-    const result = await client.scrapeUrl(COMMBUYS_PUBLIC_BIDS_URL, {
+    const result = await client.scrapeUrl(WORCESTER_BIDS_URL, {
       formats: ['markdown'],
     });
 
     if (!result.success) {
-      throw new CommbuysApiError(
-        'Failed to scrape COMMBUYS',
-        undefined,
-        result
-      );
+      throw new CommbuysApiError('Failed to scrape Worcester bids', undefined, result);
     }
 
     const content = result.markdown || '';
-    const opportunities = parseCommbuysOpportunitiesFromContent(content);
+    const opportunities = parseWorcesterOpportunities(content);
 
     return opportunities.slice(0, limit);
   } catch (error) {
-    if (error instanceof CommbuysApiError) {
-      throw error;
-    }
+    if (error instanceof CommbuysApiError) throw error;
     throw new CommbuysApiError(
-      `Failed to fetch from COMMBUYS: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to fetch from Worcester: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }
 
 /**
- * Normalize real COMMBUYS opportunity to ContractLead format
+ * Parse Springfield bid listings from markdown
+ * Format: 26-089 | "Title" | Tuesday, January 13, 2026 at 2 p.m.
  */
-function normalizeRealCommbuysOpportunity(opportunity: CommbuysOpportunity) {
-  const parseDate = (dateStr: string | null): Date | null => {
-    if (!dateStr) return null;
+function parseSpringfieldOpportunities(content: string): CommbuysOpportunity[] {
+  const opportunities: CommbuysOpportunity[] = [];
+  const lines = content.split('\n');
 
-    // Handle MM/DD/YYYY or MM/DD/YY format
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/').map(Number);
-      if (parts.length === 3) {
-        let [month, day, year] = parts;
-        // Handle 2-digit year
-        if (year < 100) {
-          year += year > 50 ? 1900 : 2000;
-        }
-        const date = new Date(year, month - 1, day);
-        return isNaN(date.getTime()) ? null : date;
+  for (const line of lines) {
+    // Match table rows: | 26-089 | "Title" | Tuesday, January 13, 2026 at 2 p.m. |
+    if (!line.startsWith('|') || line.includes('---')) continue;
+
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+
+    // Skip header row
+    if (cells[0].toLowerCase() === 'bid number') continue;
+
+    const bidId = cells[0];
+    // Remove quotes from title
+    const title = cells[1].replace(/^["']|["']$/g, '');
+    const dueDateRaw = cells[2];
+
+    // Skip if doesn't look like a Springfield bid number (XX-XXX format)
+    if (!bidId.match(/^\d+-\d+$/)) continue;
+
+    // Parse date like "Tuesday, January 13, 2026 at 2 p.m."
+    const dateMatch = dueDateRaw.match(/(\w+),?\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})/);
+    let dueDate: string | null = null;
+    if (dateMatch) {
+      const monthNames: Record<string, number> = {
+        january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+        july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
+      };
+      const month = monthNames[dateMatch[2].toLowerCase()];
+      if (month) {
+        dueDate = `${month}/${dateMatch[3]}/${dateMatch[4]}`;
       }
     }
 
-    const date = new Date(dateStr);
-    return isNaN(date.getTime()) ? null : date;
-  };
+    opportunities.push({
+      bidId: `SPFLD-${bidId}`,
+      title,
+      description: null,
+      agency: 'City of Springfield',
+      category: null,
+      postedDate: null,
+      dueDate,
+      status: 'Open',
+      url: `${SPRINGFIELD_BASE_URL}/finance/procurement-bids/bid_detail.php?bid=${bidId.replace('-', '')}`,
+    });
+  }
 
-  return {
-    title: opportunity.title,
-    description: opportunity.description,
-    agency: opportunity.agency || 'Commonwealth of Massachusetts',
-    subAgency: null,
-    solicitationNumber: opportunity.bidId,
-    noticeType: opportunity.status || 'Open',
-    naicsCodes: [] as string[],
-    pscCode: null,
-    placeOfPerformance: 'Massachusetts',
-    postedDate: parseDate(opportunity.postedDate),
-    responseDeadline: parseDate(opportunity.dueDate),
-    archiveDate: null,
-    sourceUrl: opportunity.url,
-    sourceId: `COMMBUYS-${opportunity.bidId}`,
-    source: 'COMMBUYS' as const,
-    awardAmount: null,
-  };
+  return opportunities;
+}
+
+/**
+ * Fetch opportunities from Springfield, MA
+ */
+async function fetchSpringfieldOpportunities(limit: number = 25): Promise<CommbuysOpportunity[]> {
+  const client = getFirecrawl();
+
+  try {
+    const result = await client.scrapeUrl(SPRINGFIELD_BIDS_URL, {
+      formats: ['markdown'],
+    });
+
+    if (!result.success) {
+      throw new CommbuysApiError('Failed to scrape Springfield bids', undefined, result);
+    }
+
+    const content = result.markdown || '';
+    const opportunities = parseSpringfieldOpportunities(content);
+
+    return opportunities.slice(0, limit);
+  } catch (error) {
+    if (error instanceof CommbuysApiError) throw error;
+    throw new CommbuysApiError(
+      `Failed to fetch from Springfield: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }
 
 // Common type for normalized opportunities from any MA source
@@ -410,11 +365,53 @@ interface NormalizedOpportunity {
 }
 
 /**
- * Fetch all MA opportunities (Boston.gov + COMMBUYS)
+ * Normalize Worcester/Springfield opportunity to ContractLead format
+ */
+function normalizeCityOpportunity(opportunity: CommbuysOpportunity, source: string): NormalizedOpportunity {
+  const parseDate = (dateStr: string | null): Date | null => {
+    if (!dateStr) return null;
+
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/').map(Number);
+      if (parts.length === 3) {
+        let [month, day, year] = parts;
+        if (year < 100) year += year > 50 ? 1900 : 2000;
+        const date = new Date(year, month - 1, day);
+        return isNaN(date.getTime()) ? null : date;
+      }
+    }
+
+    return null;
+  };
+
+  return {
+    title: opportunity.title,
+    description: opportunity.description,
+    agency: opportunity.agency,
+    subAgency: opportunity.category || null,
+    solicitationNumber: opportunity.bidId,
+    noticeType: 'Open',
+    naicsCodes: [] as string[],
+    pscCode: null,
+    placeOfPerformance: `${opportunity.agency?.replace('City of ', '')}, Massachusetts`,
+    postedDate: parseDate(opportunity.postedDate),
+    responseDeadline: parseDate(opportunity.dueDate),
+    archiveDate: null,
+    sourceUrl: opportunity.url,
+    sourceId: opportunity.bidId,
+    source,
+    awardAmount: null,
+  };
+}
+
+/**
+ * Fetch all MA opportunities (Boston + Worcester + Springfield)
+ * COMMBUYS.com blocks web scraping, so we fetch from city sites instead
  */
 export async function fetchAllMassachusettsOpportunities(
   bostonLimit: number = 25,
-  commbuysLimit: number = 50
+  worcesterLimit: number = 25,
+  springfieldLimit: number = 25
 ): Promise<NormalizedOpportunity[]> {
   const results: NormalizedOpportunity[] = [];
 
@@ -422,16 +419,27 @@ export async function fetchAllMassachusettsOpportunities(
   try {
     const bostonOpportunities = await fetchRawCommbuysOpportunities(bostonLimit);
     results.push(...bostonOpportunities.map(normalizeCommbuysOpportunity));
+    console.log(`Fetched ${bostonOpportunities.length} opportunities from Boston`);
   } catch (error) {
     console.error('Failed to fetch Boston.gov opportunities:', error);
   }
 
-  // Fetch from real COMMBUYS
+  // Fetch from Worcester
   try {
-    const commbuysOpportunities = await fetchRealCommbuysOpportunities(commbuysLimit);
-    results.push(...commbuysOpportunities.map(normalizeRealCommbuysOpportunity));
+    const worcesterOpportunities = await fetchWorcesterOpportunities(worcesterLimit);
+    results.push(...worcesterOpportunities.map(o => normalizeCityOpportunity(o, 'WORCESTER_GOV')));
+    console.log(`Fetched ${worcesterOpportunities.length} opportunities from Worcester`);
   } catch (error) {
-    console.error('Failed to fetch COMMBUYS opportunities:', error);
+    console.error('Failed to fetch Worcester opportunities:', error);
+  }
+
+  // Fetch from Springfield
+  try {
+    const springfieldOpportunities = await fetchSpringfieldOpportunities(springfieldLimit);
+    results.push(...springfieldOpportunities.map(o => normalizeCityOpportunity(o, 'SPRINGFIELD_GOV')));
+    console.log(`Fetched ${springfieldOpportunities.length} opportunities from Springfield`);
+  } catch (error) {
+    console.error('Failed to fetch Springfield opportunities:', error);
   }
 
   return results;

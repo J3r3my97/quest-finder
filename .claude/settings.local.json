@@ -42,7 +42,12 @@
       "Bash(set +a)",
       "Bash(DATABASE_URL=\"$quests_store_DATABASE_URL\" npx prisma migrate:*)",
       "Bash(DATABASE_URL=\"$DATABASE_URL:-$quests_store_DATABASE_URL\" npx prisma migrate dev:*)",
-      "Bash(DATABASE_URL=\"$DATABASE_URL:-$quests_store_DATABASE_URL\" npx prisma db push:*)"
+      "Bash(DATABASE_URL=\"$DATABASE_URL:-$quests_store_DATABASE_URL\" npx prisma db push:*)",
+      "WebFetch(domain:www.govinfo.gov)",
+      "WebFetch(domain:open.gsa.gov)",
+      "WebFetch(domain:www.cambridgema.gov)",
+      "WebFetch(domain:www.worcesterma.gov)",
+      "WebFetch(domain:www.springfield-ma.gov)"
     ]
   }
 }

@@ -1,10 +1,10 @@
 import { inngest } from '@/lib/inngest';
 import { prisma } from '@/lib/prisma';
 
-// Fetch from Boston.gov + real COMMBUYS
-async function fetchMassachusettsOpportunities(bostonLimit: number, commbuysLimit: number) {
+// Fetch from Boston.gov + Worcester + Springfield
+async function fetchMassachusettsOpportunities(bostonLimit: number, worcesterLimit: number, springfieldLimit: number) {
   const { fetchAllMassachusettsOpportunities } = await import('@/services/commbuys');
-  return fetchAllMassachusettsOpportunities(bostonLimit, commbuysLimit);
+  return fetchAllMassachusettsOpportunities(bostonLimit, worcesterLimit, springfieldLimit);
 }
 
 /**
@@ -23,7 +23,7 @@ export const syncCommbuys = inngest.createFunction(
     const opportunities = await step.run('fetch-opportunities', async () => {
       logger.info('Fetching opportunities from Massachusetts sources (Boston.gov + COMMBUYS)');
 
-      const results = await fetchMassachusettsOpportunities(25, 50);
+      const results = await fetchMassachusettsOpportunities(25, 25, 25);
 
       logger.info(`Fetched ${results.length} opportunities from Massachusetts sources`);
       return results;
@@ -131,7 +131,7 @@ export const manualSyncCommbuys = inngest.createFunction(
 
     // Fetch from both Boston.gov and COMMBUYS
     const opportunities = await step.run('fetch-opportunities', async () => {
-      return fetchMassachusettsOpportunities(25, 50);
+      return fetchMassachusettsOpportunities(25, 25, 25);
     });
 
     const stats = await step.run('upsert-contracts', async () => {
