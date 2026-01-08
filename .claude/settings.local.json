@@ -47,7 +47,9 @@
       "WebFetch(domain:open.gsa.gov)",
       "WebFetch(domain:www.cambridgema.gov)",
       "WebFetch(domain:www.worcesterma.gov)",
-      "WebFetch(domain:www.springfield-ma.gov)"
+      "WebFetch(domain:www.springfield-ma.gov)",
+      "WebFetch(domain:blog.mass.gov)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_PLCMQOYk2pl3@ep-purple-paper-ahi62w3r-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx prisma db push:*)"
     ]
   }
 }

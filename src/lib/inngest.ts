@@ -13,6 +13,11 @@ export type Events = {
       force?: boolean;
     };
   };
+  'commbuys-email/sync': {
+    data: {
+      force?: boolean;
+    };
+  };
   'alerts/check': {
     data: {
       savedSearchId?: string;

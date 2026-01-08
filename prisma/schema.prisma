@@ -253,3 +253,17 @@ enum AlertFrequency {
   DAILY
   WEEKLY
 }
+
+// Sync state tracking for various data sources
+model SyncState {
+  id            String   @id @default(cuid())
+  syncType      String   @unique // e.g., "COMMBUYS_EMAIL", "SAM_GOV"
+  lastSyncedAt  DateTime
+  lastMessageId String?  // For email: last processed Gmail message ID
+  metadata      Json?    // Additional tracking data (error counts, etc.)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sync_states")
+}
