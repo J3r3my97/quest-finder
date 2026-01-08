@@ -33,8 +33,10 @@ export async function GET(request: NextRequest) {
       placeOfPerformance: searchParams.get('placeOfPerformance') || undefined,
     };
 
-    // Build where clause
-    const where: Prisma.ContractLeadWhereInput = {};
+    // Build where clause - always exclude archived contracts
+    const where: Prisma.ContractLeadWhereInput = {
+      isArchived: false,
+    };
 
     if (filters.keyword) {
       where.OR = [

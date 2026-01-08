@@ -57,8 +57,8 @@ function calculateNaicsScore(
   profile: CompanyProfile
 ): { points: number; matched: boolean; reason: string } {
   if (!contract.naicsCodes || contract.naicsCodes.length === 0) {
-    // No NAICS on contract - give partial points
-    return { points: 20, matched: false, reason: '' };
+    // No NAICS on contract - no points (penalize missing data)
+    return { points: 0, matched: false, reason: '' };
   }
 
   if (!profile.naicsCodes || profile.naicsCodes.length === 0) {
@@ -94,8 +94,8 @@ function calculateCertificationScore(
   profile: CompanyProfile
 ): { points: number; matched: boolean; reason: string } {
   if (!contract.setAsideType) {
-    // No set-aside requirement - any business can bid, partial points
-    return { points: 15, matched: false, reason: '' };
+    // No set-aside requirement - no points (penalize missing data)
+    return { points: 0, matched: false, reason: '' };
   }
 
   if (!profile.certifications || profile.certifications.length === 0) {
@@ -139,13 +139,13 @@ function calculateLocationScore(
   profile: CompanyProfile
 ): { points: number; matched: boolean; reason: string } {
   if (!contract.placeOfPerformance) {
-    // No location specified - remote work possible, partial points
-    return { points: 8, matched: false, reason: '' };
+    // No location specified - no points (penalize missing data)
+    return { points: 0, matched: false, reason: '' };
   }
 
   if (!profile.preferredStates || profile.preferredStates.length === 0) {
-    // User has no location preference - partial points
-    return { points: 8, matched: false, reason: '' };
+    // User has no location preference - no points
+    return { points: 0, matched: false, reason: '' };
   }
 
   // Check if contract location contains any of user's preferred states
@@ -185,17 +185,17 @@ function calculateSizeScore(
   const contractValue = contract.estimatedValue || contract.awardAmount;
 
   if (!contractValue) {
-    // No value specified - partial points
-    return { points: 8, matched: false, reason: '' };
+    // No value specified - no points (penalize missing data)
+    return { points: 0, matched: false, reason: '' };
   }
 
   const value = Number(contractValue);
   const min = profile.minContractValue;
   const max = profile.maxContractValue;
 
-  // No preferences set - partial points
+  // No preferences set - no points
   if (min === null && max === null) {
-    return { points: 8, matched: false, reason: '' };
+    return { points: 0, matched: false, reason: '' };
   }
 
   // Check if contract is within preferred range
@@ -211,18 +211,18 @@ function calculateSizeScore(
     };
   }
 
-  // Partial match - within 50% of range
+  // Partial match - within 50% of range, give half points
   if (min !== null && value < min) {
     const ratio = value / min;
     if (ratio > 0.5) {
-      return { points: 8, matched: false, reason: '' };
+      return { points: 7, matched: false, reason: '' };
     }
   }
 
   if (max !== null && value > max) {
     const ratio = max / value;
     if (ratio > 0.5) {
-      return { points: 8, matched: false, reason: '' };
+      return { points: 7, matched: false, reason: '' };
     }
   }
 

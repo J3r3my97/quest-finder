@@ -9,6 +9,8 @@ import {
   sendAlert,
   scheduledAlertCheck,
   checkProfileAlerts,
+  archiveContracts,
+  manualArchiveContracts,
 } from '@/inngest/functions';
 
 // Create the Inngest serve handler
@@ -23,5 +25,7 @@ export const { GET, POST, PUT } = serve({
     sendAlert,
     scheduledAlertCheck,
     checkProfileAlerts,
+    archiveContracts,
+    manualArchiveContracts,
   ],
 });

@@ -1,32 +1,31 @@
 import { inngest } from '@/lib/inngest';
 import { prisma } from '@/lib/prisma';
 
-// TODO: Will be implemented by Workstream 1
-async function fetchCommbuysOpportunities(limit: number) {
-  // Stub - returns empty array until service is ready
-  const { fetchCommbuysOpportunities } = await import('@/services/commbuys');
-  return fetchCommbuysOpportunities(limit);
+// Fetch from Boston.gov + real COMMBUYS
+async function fetchMassachusettsOpportunities(bostonLimit: number, commbuysLimit: number) {
+  const { fetchAllMassachusettsOpportunities } = await import('@/services/commbuys');
+  return fetchAllMassachusettsOpportunities(bostonLimit, commbuysLimit);
 }
 
 /**
- * Sync contracts from COMMBUYS (Massachusetts state procurement)
+ * Sync contracts from Massachusetts sources (Boston.gov + COMMBUYS)
  * Runs daily to fetch new and updated contract opportunities
  */
 export const syncCommbuys = inngest.createFunction(
   {
     id: 'sync-commbuys',
-    name: 'Sync Contracts from COMMBUYS',
+    name: 'Sync Contracts from Massachusetts',
     retries: 3,
   },
   { cron: '0 7 * * *' }, // Run daily at 7 AM UTC (staggered from SAM.gov at 6 AM)
   async ({ step, logger }) => {
-    // Step 1: Fetch recent opportunities from COMMBUYS
+    // Step 1: Fetch opportunities from Boston.gov + COMMBUYS
     const opportunities = await step.run('fetch-opportunities', async () => {
-      logger.info('Fetching opportunities from COMMBUYS');
+      logger.info('Fetching opportunities from Massachusetts sources (Boston.gov + COMMBUYS)');
 
-      const results = await fetchCommbuysOpportunities(25);
+      const results = await fetchMassachusettsOpportunities(25, 50);
 
-      logger.info(`Fetched ${results.length} opportunities from COMMBUYS`);
+      logger.info(`Fetched ${results.length} opportunities from Massachusetts sources`);
       return results;
     });
 
@@ -117,22 +116,22 @@ export const syncCommbuys = inngest.createFunction(
 );
 
 /**
- * Manual trigger for COMMBUYS sync
+ * Manual trigger for Massachusetts sync
  * Can be triggered via API or admin panel
  */
 export const manualSyncCommbuys = inngest.createFunction(
   {
     id: 'manual-sync-commbuys',
-    name: 'Manual COMMBUYS Sync',
+    name: 'Manual Massachusetts Sync',
     retries: 2,
   },
   { event: 'commbuys/sync' },
   async ({ event, step, logger }) => {
-    logger.info('Manual COMMBUYS sync triggered', { force: event.data.force });
+    logger.info('Manual Massachusetts sync triggered', { force: event.data.force });
 
-    // Reuse the same logic as the scheduled sync
+    // Fetch from both Boston.gov and COMMBUYS
     const opportunities = await step.run('fetch-opportunities', async () => {
-      return fetchCommbuysOpportunities(25);
+      return fetchMassachusettsOpportunities(25, 50);
     });
 
     const stats = await step.run('upsert-contracts', async () => {

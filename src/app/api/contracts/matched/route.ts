@@ -36,6 +36,7 @@ export async function GET() {
 
     const contracts = await prisma.contractLead.findMany({
       where: {
+        isArchived: false,
         postedDate: { gte: thirtyDaysAgo },
         OR: [
           { responseDeadline: null },
